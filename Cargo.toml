@@ -1,0 +1,9 @@
+[package]
+name = "ena"
+version = "0.1.0"
+authors = ["Pluie"]
+
+description = "A 4chan scraper"
+license = "AGPL-3.0"
+
+[dependencies]
