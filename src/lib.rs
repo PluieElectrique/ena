@@ -1,6 +1,10 @@
+extern crate hyper;
 #[macro_use]
 extern crate serde_derive;
+extern crate serde_json;
 extern crate toml;
+
+pub mod four_chan;
 
 use std::fs::File;
 use std::io::prelude::*;

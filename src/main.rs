@@ -1,10 +1,17 @@
 extern crate ena;
 extern crate futures;
+extern crate hyper;
+extern crate hyper_tls;
 extern crate mysql_async as my;
+extern crate serde_json;
 extern crate tokio_core;
 
+use ena::four_chan::FourChanApi;
 use ena::*;
-use futures::future::*;
+use futures::future;
+use futures::prelude::*;
+use hyper::Client;
+use hyper_tls::HttpsConnector;
 use my::prelude::*;
 use tokio_core::reactor::Core;
 
@@ -14,6 +21,21 @@ fn main() {
 
     let mut core = Core::new().expect("Couldn't create Tokio core");
     let pool = my::Pool::new(config.database_url, &core.handle());
+
+    let https = HttpsConnector::new(2).expect("Could not create HttpsConnector");
+    let client = Client::builder().build::<_, hyper::Body>(https);
+
+    let uri = FourChanApi::Threads(&config.boards[0]).get_uri();
+    let future = client
+        .get(uri)
+        .and_then(|res| res.into_body().concat2())
+        .and_then(|body| {
+            let threads = four_chan::deserialize_threads(&body);
+            println!("{:?}", threads);
+            Ok(())
+        });
+    core.run(future)
+        .expect("Failed to deserialize threads.json");
 
     let futures = {
         let pool = pool.clone();
@@ -35,7 +57,7 @@ fn main() {
         })
     };
 
-    let future = join_all(futures).and_then(|_| pool.disconnect());
+    let future = future::join_all(futures).and_then(|_| pool.disconnect());
 
     core.run(future).expect("Failed to run future");
 }
