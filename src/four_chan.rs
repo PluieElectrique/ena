@@ -1,3 +1,6 @@
+use hyper;
+use serde_json;
+
 const FOUR_CHAN_API_PREFIX: &str = "https://a.4cdn.org/";
 
 // TODO: validation of board names and page numbers?
@@ -11,7 +14,7 @@ pub enum FourChanApi<'a> {
 }
 
 impl<'a> FourChanApi<'a> {
-    pub fn get_uri(&self) -> super::hyper::Uri {
+    pub fn get_uri(&self) -> hyper::Uri {
         use self::FourChanApi::*;
 
         let mut uri = String::from(FOUR_CHAN_API_PREFIX);
@@ -44,7 +47,7 @@ pub struct Thread {
 
 pub fn deserialize_threads(slice: &[u8]) -> Vec<Thread> {
     let threads: Vec<ThreadPage> =
-        super::serde_json::from_slice(slice).expect("JSON deserializing failed");
+        serde_json::from_slice(slice).expect("JSON deserializing failed");
     threads.into_iter().fold(vec![], |mut acc, mut t| {
         acc.append(&mut t.threads);
         acc
