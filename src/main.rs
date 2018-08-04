@@ -6,7 +6,6 @@ extern crate mysql_async as my;
 extern crate serde_json;
 extern crate tokio_core;
 
-use ena::four_chan::FourChanApi;
 use ena::*;
 use futures::future;
 use futures::prelude::*;
@@ -25,15 +24,10 @@ fn main() {
     let https = HttpsConnector::new(2).expect("Could not create HttpsConnector");
     let client = Client::builder().build::<_, hyper::Body>(https);
 
-    let uri = FourChanApi::Threads(&config.boards[0]).get_uri();
-    let future = client
-        .get(uri)
-        .and_then(|res| res.into_body().concat2())
-        .and_then(|body| {
-            let threads = four_chan::deserialize_threads(&body);
-            println!("{:?}", threads);
-            Ok(())
-        });
+    let future = four_chan::get_threads(&client, config.boards[0]).and_then(|threads| {
+        print!("{:?}, ", threads);
+        Ok(())
+    });
     core.run(future)
         .expect("Failed to deserialize threads.json");
 
@@ -43,7 +37,7 @@ fn main() {
         config.boards.iter().map(move |board| {
             println!("Showing 5 posts from {}", board);
 
-            let board_sql = board_sql.replace("%%BOARD%%", &board);
+            let board_sql = board_sql.replace("%%BOARD%%", &board.to_string());
             pool.get_conn()
                 .and_then(|conn| conn.drop_query(board_sql))
                 .and_then(move |conn| conn.query(format!("SELECT title FROM {} LIMIT 5", board)))

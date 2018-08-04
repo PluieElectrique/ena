@@ -1,3 +1,4 @@
+extern crate futures;
 extern crate hyper;
 #[macro_use]
 extern crate serde_derive;
@@ -5,6 +6,8 @@ extern crate serde_json;
 extern crate toml;
 
 pub mod four_chan;
+
+pub use hyper::client::connect::Connect;
 
 use std::fs::File;
 use std::io::prelude::*;
@@ -15,7 +18,7 @@ pub const COMMON_SQL: &str = include_str!("sql/common.sql");
 
 #[derive(Deserialize)]
 pub struct Config {
-    pub boards: Vec<String>,
+    pub boards: Vec<four_chan::Board>,
     pub charset: String,
     pub database_url: String,
 }
@@ -27,5 +30,8 @@ pub fn parse_config() -> io::Result<Config> {
     buf_reader.read_to_string(&mut contents)?;
 
     // TODO: don't unwrap this and use failure or something
-    Ok(toml::from_str(&contents).unwrap())
+    Ok(toml::from_str(&contents).expect("Could not parse config file"))
 }
+
+pub trait Connector: 'static + Connect {}
+impl<T: 'static + Connect> Connector for T {}

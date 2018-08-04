@@ -1,41 +1,66 @@
-use hyper;
+//! 4chan's API. Not implemented: getting the page or catalog of a board or boards.json
+
+use std::fmt;
+
+use futures::prelude::*;
+use hyper::{self, Client};
 use serde_json;
 
-const FOUR_CHAN_API_PREFIX: &str = "https://a.4cdn.org/";
+use super::Connector;
 
-// TODO: validation of board names and page numbers?
-pub enum FourChanApi<'a> {
-    Thread(&'a str, u64),
-    Threads(&'a str),
-    Page(&'a str, u8),
-    Catalog(&'a str),
-    Archive(&'a str),
-    Boards,
+const API_PREFIX: &str = "https://a.4cdn.org/";
+
+fn get_uri(path: String) -> hyper::Uri {
+    let mut uri = String::from(API_PREFIX);
+    uri.push_str(&path);
+    uri.parse().expect("Could not parse URI")
 }
 
-impl<'a> FourChanApi<'a> {
-    pub fn get_uri(&self) -> hyper::Uri {
-        use self::FourChanApi::*;
+pub fn get_thread<C: Connector>(
+    client: &Client<C>,
+    board: Board,
+    no: u64,
+) -> impl Future<Error = hyper::Error> {
+    client
+        .get(get_uri(format!("{}/thread/{}.json", board, no)))
+        .and_then(|res| res.into_body().concat2())
+        .and_then(|_body| {
+            //unimplemented!()
+            Ok(())
+        })
+}
 
-        let mut uri = String::from(FOUR_CHAN_API_PREFIX);
-        uri.push_str(&match self {
-            Thread(board, no) => format!("{}/thread/{}.json", board, no),
-            Threads(board) => format!("{}/threads.json", board),
-            Page(board, num) => {
-                assert!(*num <= 10);
-                format!("{}/{}.json", board, num)
-            }
-            Catalog(board) => format!("{}/catalog.json", board),
-            Archive(board) => format!("{}/archive.json", board),
-            Boards => String::from("boards.json"),
-        });
+pub fn get_threads<C: Connector>(
+    client: &Client<C>,
+    board: Board,
+) -> impl Future<Item = Vec<Thread>, Error = hyper::Error> {
+    client
+        .get(get_uri(format!("{}/threads.json", board)))
+        .and_then(|res| res.into_body().concat2())
+        .and_then(|body| {
+            let threads: Vec<ThreadPage> =
+                serde_json::from_slice(&body).expect("Deserializing a thread failed");
+            Ok(threads.into_iter().fold(vec![], |mut acc, mut t| {
+                acc.append(&mut t.threads);
+                acc
+            }))
+        })
+}
 
-        uri.parse().expect("Could not parse 4chan API url")
-    }
+pub fn get_archive<C: Connector>(
+    client: &Client<C>,
+    board: Board,
+) -> impl Future<Item = Vec<u64>, Error = hyper::Error> {
+    client
+        .get(get_uri(format!("{}/archive.json", board)))
+        .and_then(|res| res.into_body().concat2())
+        .and_then(|body| {
+            Ok(serde_json::from_slice(&body).expect("Deserializing the archive failed"))
+        })
 }
 
 #[derive(Deserialize)]
-pub struct ThreadPage {
+struct ThreadPage {
     threads: Vec<Thread>,
 }
 
@@ -43,15 +68,6 @@ pub struct ThreadPage {
 pub struct Thread {
     no: u64,
     last_modified: u64,
-}
-
-pub fn deserialize_threads(slice: &[u8]) -> Vec<Thread> {
-    let threads: Vec<ThreadPage> =
-        serde_json::from_slice(slice).expect("JSON deserializing failed");
-    threads.into_iter().fold(vec![], |mut acc, mut t| {
-        acc.append(&mut t.threads);
-        acc
-    })
 }
 
 #[derive(Debug, Deserialize)]
@@ -128,4 +144,90 @@ pub struct Post {
 
     // ???
     last_modified: u64,
+}
+
+impl fmt::Display for Board {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if let Board::_3 = self {
+            write!(f, "3")
+        } else {
+            fmt::Debug::fmt(self, f)
+        }
+    }
+}
+
+#[allow(non_camel_case_types)]
+#[derive(Clone, Copy, Debug, Deserialize)]
+pub enum Board {
+    _3,
+    a,
+    aco,
+    adv,
+    an,
+    asp,
+    b,
+    bant,
+    biz,
+    c,
+    cgl,
+    ck,
+    cm,
+    co,
+    d,
+    diy,
+    e,
+    f,
+    fa,
+    fit,
+    g,
+    gd,
+    gif,
+    h,
+    hc,
+    hm,
+    hr,
+    i,
+    ic,
+    his,
+    int,
+    jp,
+    k,
+    lit,
+    lgbt,
+    m,
+    mlp,
+    mu,
+    news,
+    n,
+    o,
+    out,
+    p,
+    po,
+    pol,
+    qst,
+    r,
+    r9k,
+    s4s,
+    s,
+    sci,
+    soc,
+    sp,
+    t,
+    tg,
+    toy,
+    trash,
+    trv,
+    tv,
+    u,
+    v,
+    vg,
+    vip,
+    vp,
+    vr,
+    w,
+    wg,
+    wsg,
+    wsr,
+    x,
+    y,
 }

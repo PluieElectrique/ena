@@ -1,3 +1,4 @@
+# List of boards to scrape (note: 3 must be written as "_3")
 boards = [""]
 charset = "utf8mb4"
 database_url = "mysql://username:password@localhost/ena"
