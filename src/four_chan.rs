@@ -108,8 +108,8 @@ struct ThreadPage {
 
 #[derive(Debug, Deserialize)]
 pub struct Thread {
-    no: u64,
-    last_modified: u64,
+    pub no: u64,
+    pub last_modified: u64,
 }
 
 #[derive(Debug, Deserialize)]

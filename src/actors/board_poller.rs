@@ -34,18 +34,78 @@ impl BoardPoller {
         }
     }
 
+    fn update_threads(&mut self, mut curr_threads: Vec<four_chan::Thread>) {
+        let mut new_threads = vec![];
+        let mut modified_threads = vec![];
+        let mut removed_threads = vec![];
+
+        // Sort ascending
+        curr_threads.sort_by(|a, b| a.no.cmp(&b.no));
+
+        {
+            let mut prev_iter = self.threads.iter();
+            let mut curr_iter = curr_threads.iter();
+
+            let mut prev_thread = prev_iter.next();
+            let mut curr_thread = curr_iter.next();
+
+            loop {
+                match (prev_thread, curr_thread) {
+                    (Some(prev), Some(curr)) => {
+                        if prev.no < curr.no {
+                            removed_threads.push(prev.no);
+                            prev_thread = prev_iter.next();
+                        } else if prev.no == curr.no {
+                            if prev.last_modified < curr.last_modified {
+                                modified_threads.push(curr.no);
+                            }
+                            prev_thread = prev_iter.next();
+                            curr_thread = curr_iter.next();
+                        } else if prev.no > curr.no {
+                            // Is it possible for an old thread to be added back?
+                            // TODO: better error handling/logging
+                            println!(
+                                "A previously removed thread ({}) from /{}/ has reappeared!",
+                                curr.no, self.board
+                            );
+                            new_threads.push(curr.no);
+                            curr_thread = curr_iter.next();
+                        }
+                    }
+                    (Some(prev), None) => {
+                        removed_threads.push(prev.no);
+                        prev_thread = prev_iter.next();
+                    }
+                    (None, Some(curr)) => {
+                        new_threads.push(curr.no);
+                        curr_thread = curr_iter.next();
+                    }
+                    (None, None) => break,
+                }
+            }
+            println!("New threads: {:?}", new_threads);
+            println!("Modified threads: {:?}", modified_threads);
+            println!("Removed threads: {:?}", removed_threads);
+        }
+        self.threads = curr_threads;
+    }
+
     fn poll(&self, ctx: &mut Context<Self>) {
         ctx.run_later(Duration::new(self.interval, 0), |act, ctx| {
             let fetcher = System::current().registry().get::<four_chan::Fetcher>();
-            Arbiter::spawn(
+            ctx.spawn(
                 fetcher
                     .send(four_chan::FetchThreads(act.board))
-                    .and_then(|threads| {
+                    // TODO: better error handling
+                    .map_err(|e| println!("{}", e))
+                    .into_actor(act)
+                    .map(|threads, act, _ctx| {
                         let now = ::std::time::Instant::now();
                         println!("Fetched threads at {:?}\n{:?}", now, threads);
-                        Ok(())
-                    })
-                    .map_err(|e| println!("{}", e)),
+                        if let Ok(threads) = threads {
+                            act.update_threads(threads);
+                        }
+                    }),
             );
             act.poll(ctx);
         });
