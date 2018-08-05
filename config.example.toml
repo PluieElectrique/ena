@@ -2,3 +2,5 @@
 boards = [""]
 charset = "utf8mb4"
 database_url = "mysql://username:password@localhost/ena"
+# Seconds to wait between fetching the threads.json of each board
+poll_interval = 30

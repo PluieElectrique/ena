@@ -28,6 +28,9 @@ impl Actor for Fetcher {
     type Context = Context<Self>;
 }
 
+impl Supervised for Fetcher {}
+impl SystemService for Fetcher {}
+
 fn get_uri(path: String) -> hyper::Uri {
     let mut uri = String::from(API_PREFIX);
     uri.push_str(&path);

@@ -7,6 +7,7 @@ extern crate serde_derive;
 extern crate serde_json;
 extern crate toml;
 
+pub mod actors;
 pub mod four_chan;
 
 pub use hyper::client::connect::Connect;
@@ -23,6 +24,7 @@ pub struct Config {
     pub boards: Vec<four_chan::Board>,
     pub charset: String,
     pub database_url: String,
+    pub poll_interval: u64,
 }
 
 pub fn parse_config() -> io::Result<Config> {

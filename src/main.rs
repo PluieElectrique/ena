@@ -8,6 +8,7 @@ extern crate serde_json;
 extern crate tokio_core;
 
 use actix::prelude::*;
+use ena::actors::*;
 use ena::*;
 use futures::future;
 use futures::prelude::*;
@@ -22,18 +23,7 @@ fn main() {
     let pool = my::Pool::new(config.database_url, &core.handle());
 
     let sys = System::new("ena");
-    let fetcher = four_chan::Fetcher::default().start();
-    Arbiter::spawn(
-        fetcher
-            .send(four_chan::FetchThreads(config.boards[0]))
-            .and_then(|threads| {
-                println!("{:?}, ", threads);
-                System::current().stop();
-                Ok(())
-            })
-            .map_err(|e| println!("{}", e)),
-    );
-    sys.run();
+    BoardPoller::new(config.boards[0], config.poll_interval, vec![]).start();
 
     let futures = {
         let pool = pool.clone();
@@ -58,4 +48,6 @@ fn main() {
     let future = future::join_all(futures).and_then(|_| pool.disconnect());
 
     core.run(future).expect("Failed to run future");
+
+    sys.run();
 }
