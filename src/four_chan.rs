@@ -1,28 +1,31 @@
 //! 4chan's API. Not implemented: getting the page or catalog of a board or boards.json
 
+use std::default::Default;
 use std::fmt;
 
 use actix::prelude::*;
 use futures::prelude::*;
-use hyper::{self, Client};
+use hyper;
+use hyper::client::{Client, HttpConnector};
+use hyper_tls::HttpsConnector;
 use serde_json;
-
-use super::Connector;
 
 const API_PREFIX: &str = "https://a.4cdn.org/";
 
-pub struct Fetcher<C: Connector> {
-    client: Client<C>,
+pub struct Fetcher {
+    client: Client<HttpsConnector<HttpConnector>>,
 }
 
-impl<C: Connector> Actor for Fetcher<C> {
-    type Context = Context<Self>;
-}
-
-impl<C: Connector> Fetcher<C> {
-    pub fn new(client: Client<C>) -> Self {
+impl Default for Fetcher {
+    fn default() -> Self {
+        let https = HttpsConnector::new(2).expect("Could not create HttpsConnector");
+        let client = Client::builder().build::<_, hyper::Body>(https);
         Self { client }
     }
+}
+
+impl Actor for Fetcher {
+    type Context = Context<Self>;
 }
 
 fn get_uri(path: String) -> hyper::Uri {
@@ -36,7 +39,7 @@ impl Message for FetchThread {
     type Result = Result<(), hyper::Error>;
 }
 
-impl<C: Connector> Handler<FetchThread> for Fetcher<C> {
+impl Handler<FetchThread> for Fetcher {
     type Result = ResponseFuture<(), hyper::Error>;
 
     fn handle(&mut self, msg: FetchThread, _ctx: &mut Self::Context) -> Self::Result {
@@ -57,7 +60,7 @@ impl Message for FetchThreads {
     type Result = Result<Vec<Thread>, hyper::Error>;
 }
 
-impl<C: Connector> Handler<FetchThreads> for Fetcher<C> {
+impl Handler<FetchThreads> for Fetcher {
     type Result = ResponseFuture<Vec<Thread>, hyper::Error>;
     fn handle(&mut self, msg: FetchThreads, _ctx: &mut Self::Context) -> Self::Result {
         Box::new(
@@ -81,7 +84,7 @@ impl Message for FetchArchive {
     type Result = Result<Vec<u64>, hyper::Error>;
 }
 
-impl<C: Connector> Handler<FetchArchive> for Fetcher<C> {
+impl Handler<FetchArchive> for Fetcher {
     type Result = ResponseFuture<Vec<u64>, hyper::Error>;
     fn handle(&mut self, msg: FetchArchive, _ctx: &mut Self::Context) -> Self::Result {
         Box::new(

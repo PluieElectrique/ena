@@ -11,8 +11,6 @@ use actix::prelude::*;
 use ena::*;
 use futures::future;
 use futures::prelude::*;
-use hyper::Client;
-use hyper_tls::HttpsConnector;
 use my::prelude::*;
 use tokio_core::reactor::Core;
 
@@ -23,11 +21,8 @@ fn main() {
     let mut core = Core::new().expect("Couldn't create Tokio core");
     let pool = my::Pool::new(config.database_url, &core.handle());
 
-    let https = HttpsConnector::new(2).expect("Could not create HttpsConnector");
-    let client = Client::builder().build::<_, hyper::Body>(https);
-
     let sys = System::new("ena");
-    let fetcher = four_chan::Fetcher::new(client).start();
+    let fetcher = four_chan::Fetcher::default().start();
     Arbiter::spawn(
         fetcher
             .send(four_chan::FetchThreads(config.boards[0]))

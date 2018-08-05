@@ -1,6 +1,7 @@
 extern crate actix;
 extern crate futures;
 extern crate hyper;
+extern crate hyper_tls;
 #[macro_use]
 extern crate serde_derive;
 extern crate serde_json;
@@ -33,6 +34,3 @@ pub fn parse_config() -> io::Result<Config> {
     // TODO: don't unwrap this and use failure or something
     Ok(toml::from_str(&contents).expect("Could not parse config file"))
 }
-
-pub trait Connector: 'static + Connect {}
-impl<T: 'static + Connect> Connector for T {}
