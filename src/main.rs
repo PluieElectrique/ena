@@ -1,3 +1,4 @@
+extern crate actix;
 extern crate ena;
 extern crate futures;
 extern crate hyper;
@@ -6,6 +7,7 @@ extern crate mysql_async as my;
 extern crate serde_json;
 extern crate tokio_core;
 
+use actix::prelude::*;
 use ena::*;
 use futures::future;
 use futures::prelude::*;
@@ -24,12 +26,19 @@ fn main() {
     let https = HttpsConnector::new(2).expect("Could not create HttpsConnector");
     let client = Client::builder().build::<_, hyper::Body>(https);
 
-    let future = four_chan::get_threads(&client, config.boards[0]).and_then(|threads| {
-        print!("{:?}, ", threads);
-        Ok(())
-    });
-    core.run(future)
-        .expect("Failed to deserialize threads.json");
+    let sys = System::new("ena");
+    let fetcher = four_chan::Fetcher::new(client).start();
+    Arbiter::spawn(
+        fetcher
+            .send(four_chan::FetchThreads(config.boards[0]))
+            .and_then(|threads| {
+                println!("{:?}, ", threads);
+                System::current().stop();
+                Ok(())
+            })
+            .map_err(|e| println!("{}", e)),
+    );
+    sys.run();
 
     let futures = {
         let pool = pool.clone();

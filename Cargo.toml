@@ -7,6 +7,7 @@ description = "A 4chan scraper"
 license = "AGPL-3.0"
 
 [dependencies]
+actix = "0.7"
 futures = "0.1"
 hyper = "0.12"
 hyper-tls = "0.3"

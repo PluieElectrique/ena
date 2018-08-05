@@ -2,6 +2,7 @@
 
 use std::fmt;
 
+use actix::prelude::*;
 use futures::prelude::*;
 use hyper::{self, Client};
 use serde_json;
@@ -10,53 +11,88 @@ use super::Connector;
 
 const API_PREFIX: &str = "https://a.4cdn.org/";
 
+pub struct Fetcher<C: Connector> {
+    client: Client<C>,
+}
+
+impl<C: Connector> Actor for Fetcher<C> {
+    type Context = Context<Self>;
+}
+
+impl<C: Connector> Fetcher<C> {
+    pub fn new(client: Client<C>) -> Self {
+        Self { client }
+    }
+}
+
 fn get_uri(path: String) -> hyper::Uri {
     let mut uri = String::from(API_PREFIX);
     uri.push_str(&path);
     uri.parse().expect("Could not parse URI")
 }
 
-pub fn get_thread<C: Connector>(
-    client: &Client<C>,
-    board: Board,
-    no: u64,
-) -> impl Future<Error = hyper::Error> {
-    client
-        .get(get_uri(format!("{}/thread/{}.json", board, no)))
-        .and_then(|res| res.into_body().concat2())
-        .and_then(|_body| {
-            //unimplemented!()
-            Ok(())
-        })
+pub struct FetchThread(pub Board, pub u64);
+impl Message for FetchThread {
+    type Result = Result<(), hyper::Error>;
 }
 
-pub fn get_threads<C: Connector>(
-    client: &Client<C>,
-    board: Board,
-) -> impl Future<Item = Vec<Thread>, Error = hyper::Error> {
-    client
-        .get(get_uri(format!("{}/threads.json", board)))
-        .and_then(|res| res.into_body().concat2())
-        .and_then(|body| {
-            let threads: Vec<ThreadPage> =
-                serde_json::from_slice(&body).expect("Deserializing a thread failed");
-            Ok(threads.into_iter().fold(vec![], |mut acc, mut t| {
-                acc.append(&mut t.threads);
-                acc
-            }))
-        })
+impl<C: Connector> Handler<FetchThread> for Fetcher<C> {
+    type Result = ResponseFuture<(), hyper::Error>;
+
+    fn handle(&mut self, msg: FetchThread, _ctx: &mut Self::Context) -> Self::Result {
+        Box::new(
+            self.client
+                .get(get_uri(format!("{}/thread/{}.json", msg.0, msg.1)))
+                .and_then(|res| res.into_body().concat2())
+                .and_then(|_body| {
+                    //unimplemented!()
+                    Ok(())
+                }),
+        )
+    }
 }
 
-pub fn get_archive<C: Connector>(
-    client: &Client<C>,
-    board: Board,
-) -> impl Future<Item = Vec<u64>, Error = hyper::Error> {
-    client
-        .get(get_uri(format!("{}/archive.json", board)))
-        .and_then(|res| res.into_body().concat2())
-        .and_then(|body| {
-            Ok(serde_json::from_slice(&body).expect("Deserializing the archive failed"))
-        })
+pub struct FetchThreads(pub Board);
+impl Message for FetchThreads {
+    type Result = Result<Vec<Thread>, hyper::Error>;
+}
+
+impl<C: Connector> Handler<FetchThreads> for Fetcher<C> {
+    type Result = ResponseFuture<Vec<Thread>, hyper::Error>;
+    fn handle(&mut self, msg: FetchThreads, _ctx: &mut Self::Context) -> Self::Result {
+        Box::new(
+            self.client
+                .get(get_uri(format!("{}/threads.json", msg.0)))
+                .and_then(|res| res.into_body().concat2())
+                .and_then(|body| {
+                    let threads: Vec<ThreadPage> =
+                        serde_json::from_slice(&body).expect("Deserializing a thread failed");
+                    Ok(threads.into_iter().fold(vec![], |mut acc, mut t| {
+                        acc.append(&mut t.threads);
+                        acc
+                    }))
+                }),
+        )
+    }
+}
+
+pub struct FetchArchive(pub Board);
+impl Message for FetchArchive {
+    type Result = Result<Vec<u64>, hyper::Error>;
+}
+
+impl<C: Connector> Handler<FetchArchive> for Fetcher<C> {
+    type Result = ResponseFuture<Vec<u64>, hyper::Error>;
+    fn handle(&mut self, msg: FetchArchive, _ctx: &mut Self::Context) -> Self::Result {
+        Box::new(
+            self.client
+                .get(get_uri(format!("{}/archive.json", msg.0)))
+                .and_then(|res| res.into_body().concat2())
+                .and_then(|body| {
+                    Ok(serde_json::from_slice(&body).expect("Deserializing the archive failed"))
+                }),
+        )
+    }
 }
 
 #[derive(Deserialize)]

@@ -1,3 +1,4 @@
+extern crate actix;
 extern crate futures;
 extern crate hyper;
 #[macro_use]
