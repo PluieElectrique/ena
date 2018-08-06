@@ -41,20 +41,21 @@ fn get_uri(path: String) -> hyper::Uri {
 
 pub struct FetchThread(pub Board, pub u64);
 impl Message for FetchThread {
-    type Result = Result<(), hyper::Error>;
+    type Result = Result<Vec<Post>, hyper::Error>;
 }
 
 impl Handler<FetchThread> for Fetcher {
-    type Result = ResponseFuture<(), hyper::Error>;
+    type Result = ResponseFuture<Vec<Post>, hyper::Error>;
 
     fn handle(&mut self, msg: FetchThread, _ctx: &mut Self::Context) -> Self::Result {
         Box::new(
             self.client
                 .get(get_uri(format!("{}/thread/{}.json", msg.0, msg.1)))
                 .and_then(|res| res.into_body().concat2())
-                .and_then(|_body| {
-                    //unimplemented!()
-                    Ok(())
+                .and_then(|body| {
+                    let PostsWrapper { posts } =
+                        serde_json::from_slice(&body).expect("Deserializing a thread failed");
+                    Ok(posts)
                 }),
         )
     }
@@ -74,7 +75,7 @@ impl Handler<FetchThreads> for Fetcher {
                 .and_then(|res| res.into_body().concat2())
                 .and_then(|body| {
                     let threads: Vec<ThreadPage> =
-                        serde_json::from_slice(&body).expect("Deserializing a thread failed");
+                        serde_json::from_slice(&body).expect("Deserializing threads.json failed");
                     Ok(threads.into_iter().fold(vec![], |mut acc, mut t| {
                         acc.append(&mut t.threads);
                         acc
@@ -112,6 +113,11 @@ struct ThreadPage {
 pub struct Thread {
     pub no: u64,
     pub last_modified: u64,
+}
+
+#[derive(Deserialize)]
+struct PostsWrapper {
+    posts: Vec<Post>,
 }
 
 /// Some fields aren't used, and thus are omitted.
