@@ -3,7 +3,10 @@ extern crate ena;
 extern crate futures;
 extern crate hyper;
 extern crate hyper_tls;
+#[macro_use]
+extern crate log;
 extern crate mysql_async as my;
+extern crate pretty_env_logger;
 extern crate serde_json;
 extern crate tokio_core;
 
@@ -16,6 +19,8 @@ use my::prelude::*;
 use tokio_core::reactor::Core;
 
 fn main() {
+    pretty_env_logger::init();
+
     let config = parse_config().expect("Couldn't read config file");
     let board_sql = BOARD_SQL.replace("%%CHARSET%%", &config.charset);
 
