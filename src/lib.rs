@@ -1,7 +1,10 @@
 extern crate actix;
+extern crate failure;
 extern crate futures;
 extern crate hyper;
 extern crate hyper_tls;
+#[macro_use]
+extern crate log;
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;
@@ -11,11 +14,11 @@ extern crate toml;
 pub mod actors;
 pub mod four_chan;
 
-pub use hyper::client::connect::Connect;
-
 use std::fs::File;
 use std::io::prelude::*;
-use std::io::{self, BufReader};
+use std::io::BufReader;
+
+use failure::{Error, ResultExt};
 
 pub const BOARD_SQL: &str = include_str!("sql/boards.sql");
 pub const COMMON_SQL: &str = include_str!("sql/common.sql");
@@ -28,12 +31,22 @@ pub struct Config {
     pub poll_interval: u64,
 }
 
-pub fn parse_config() -> io::Result<Config> {
-    let file = File::open("config.toml")?;
+pub fn parse_config() -> Result<Config, Error> {
+    let file = File::open("config.toml").context("Could not open config.toml")?;
     let mut buf_reader = BufReader::new(file);
     let mut contents = String::new();
-    buf_reader.read_to_string(&mut contents)?;
+    buf_reader
+        .read_to_string(&mut contents)
+        .context("Could not read config.toml")?;
 
-    // TODO: don't unwrap this and use failure or something
-    Ok(toml::from_str(&contents).expect("Could not parse config file"))
+    Ok(toml::from_str(&contents).context("Could not parse config.toml")?)
+}
+
+pub fn print_error(err: &Error) {
+    let mut pretty = err.to_string();
+    for cause in err.iter_causes() {
+        pretty.push_str(": ");
+        pretty.push_str(&cause.to_string());
+    }
+    error!("{}", pretty);
 }

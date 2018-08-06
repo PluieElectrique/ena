@@ -10,6 +10,8 @@ extern crate pretty_env_logger;
 extern crate serde_json;
 extern crate tokio_core;
 
+use std::process;
+
 use actix::prelude::*;
 use ena::actors::*;
 use ena::*;
@@ -21,7 +23,11 @@ use tokio_core::reactor::Core;
 fn main() {
     pretty_env_logger::init();
 
-    let config = parse_config().expect("Couldn't read config file");
+    let config = parse_config().unwrap_or_else(|err| {
+        print_error(&err);
+        process::exit(1);
+    });
+
     let board_sql = BOARD_SQL.replace("%%CHARSET%%", &config.charset);
 
     let mut core = Core::new().expect("Couldn't create Tokio core");
