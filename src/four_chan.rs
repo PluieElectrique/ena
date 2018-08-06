@@ -8,6 +8,8 @@ use futures::prelude::*;
 use hyper;
 use hyper::client::{Client, HttpConnector};
 use hyper_tls::HttpsConnector;
+use serde::de::Error;
+use serde::{Deserialize, Deserializer};
 use serde_json;
 
 const API_PREFIX: &str = "https://a.4cdn.org/";
@@ -112,50 +114,49 @@ pub struct Thread {
     pub last_modified: u64,
 }
 
+/// Some fields aren't used, and thus are omitted.
 #[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct Post {
     // Required fields
     no: u64,
     #[serde(rename = "resto")]
     reply_to: u64,
-    now: String,
     time: u64,
-    #[serde(rename = "tim")]
-    time_millis: u64,
 
     // Optional fields
-    // Is only blank when name is blank and trip is provided
-    name: String,
-    trip: String,
-    // Only displays if board has DISPLAY_ID set
-    id: String,
+    /// Only blank when name is blank and trip is provided
+    name: Option<String>,
+    trip: Option<String>,
+    /// Displays if board has DISPLAY_ID set
+    id: Option<String>,
+    #[serde(default = "capcode_default")]
     capcode: String,
-    country: String,
-    country_name: String,
+    country: Option<String>,
     #[serde(rename = "sub")]
-    subject: String,
+    subject: Option<String>,
     #[serde(rename = "com")]
-    comment: String,
-    since4pass: u16,
+    comment: Option<String>,
+    #[serde(rename = "tim")]
+    time_millis: Option<u64>,
 
     // OP-only fields
-    sticky: u8,
-    closed: u8,
-    archived: u8,
-    archived_on: u64,
-    replies: u32,
-    images: u32,
-    #[serde(rename = "bumplimit")]
-    bump_limit: u8,
-    #[serde(rename = "imagelimit")]
-    image_limit: u8,
-    semantic_url: String,
-    // OP-only index fields
-    omitted_posts: u16,
-    omitted_images: u16,
+    #[serde(deserialize_with = "num_to_bool")]
+    #[serde(default)]
+    sticky: bool,
+    #[serde(deserialize_with = "num_to_bool")]
+    #[serde(default)]
+    closed: bool,
+    #[serde(deserialize_with = "num_to_bool")]
+    #[serde(default)]
+    archived: bool,
+    archived_on: Option<u64>,
 
-    // Image fields
+    #[serde(flatten)]
+    image: Option<PostImage>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PostImage {
     filename: String,
     ext: String,
     #[serde(rename = "fsize")]
@@ -170,22 +171,30 @@ pub struct Post {
     #[serde(rename = "tn_h")]
     thumbnail_height: u8,
     #[serde(rename = "filedeleted")]
-    file_deleted: u8,
+    #[serde(deserialize_with = "num_to_bool")]
+    #[serde(default)]
+    file_deleted: bool,
+    #[serde(deserialize_with = "num_to_bool")]
+    #[serde(default)]
+    spoiler: bool,
+}
 
-    // Spoiler fields
-    spoiler: u8,
-    custom_spoiler: u8,
+fn capcode_default() -> String {
+    String::from("N")
+}
 
-    // Board-specific fields
-    // /f/
-    tag: String,
-    // /q/
-    // TODO: figure this out, Vec<CapcodeReply>?
-    #[serde(skip_deserializing)]
-    capcode_replies: (),
-
-    // ???
-    last_modified: u64,
+fn num_to_bool<'de, D>(deserializer: D) -> Result<bool, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let n: u8 = Deserialize::deserialize(deserializer)?;
+    if n == 1 {
+        Ok(true)
+    } else if n == 0 {
+        Ok(false)
+    } else {
+        Err(D::Error::custom("Numeric boolean was not 0 or 1"))
+    }
 }
 
 impl fmt::Display for Board {
