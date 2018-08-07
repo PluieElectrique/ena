@@ -33,7 +33,7 @@ impl Actor for Fetcher {
 impl Supervised for Fetcher {}
 impl SystemService for Fetcher {}
 
-fn get_uri(path: String) -> hyper::Uri {
+fn get_uri(path: &str) -> hyper::Uri {
     let mut uri = String::from(API_PREFIX);
     uri.push_str(&path);
     uri.parse().unwrap_or_else(|err| {
@@ -56,7 +56,7 @@ impl Handler<FetchThread> for Fetcher {
     fn handle(&mut self, msg: FetchThread, _ctx: &mut Self::Context) -> Self::Result {
         Box::new(
             self.client
-                .get(get_uri(format!("{}/thread/{}.json", msg.0, msg.1)))
+                .get(get_uri(&format!("{}/thread/{}.json", msg.0, msg.1)))
                 .and_then(|res| res.into_body().concat2())
                 .map_err(|e| e.into())
                 .and_then(move |body| {
@@ -78,7 +78,7 @@ impl Handler<FetchThreads> for Fetcher {
     fn handle(&mut self, msg: FetchThreads, _ctx: &mut Self::Context) -> Self::Result {
         Box::new(
             self.client
-                .get(get_uri(format!("{}/threads.json", msg.0)))
+                .get(get_uri(&format!("{}/threads.json", msg.0)))
                 .and_then(|res| res.into_body().concat2())
                 .map_err(|e| e.into())
                 .and_then(move |body| {
@@ -103,7 +103,7 @@ impl Handler<FetchArchive> for Fetcher {
     fn handle(&mut self, msg: FetchArchive, _ctx: &mut Self::Context) -> Self::Result {
         Box::new(
             self.client
-                .get(get_uri(format!("{}/archive.json", msg.0)))
+                .get(get_uri(&format!("{}/archive.json", msg.0)))
                 .and_then(|res| res.into_body().concat2())
                 .map_err(|e| e.into())
                 .and_then(move |body| {
