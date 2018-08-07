@@ -1,4 +1,6 @@
 extern crate actix;
+extern crate chrono;
+#[macro_use]
 extern crate failure;
 extern crate futures;
 extern crate hyper;
@@ -10,6 +12,16 @@ extern crate serde;
 extern crate serde_derive;
 extern crate serde_json;
 extern crate toml;
+
+macro_rules! impl_enum_from {
+    ($ext_type:ty, $enum:ident, $variant:ident) => {
+        impl From<$ext_type> for $enum {
+            fn from(err: $ext_type) -> Self {
+                $enum::$variant(err)
+            }
+        }
+    };
+}
 
 pub mod actors;
 pub mod four_chan;

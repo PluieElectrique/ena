@@ -103,7 +103,7 @@ impl BoardPoller {
                             act.update_threads(threads);
                             debug!("Fetched and updated threads from {}", act.board);
                         }
-                        Err(err) => print_fail(err.as_fail()),
+                        Err(err) => print_fail(&err),
                     }),
             );
             act.poll(ctx);
