@@ -18,7 +18,7 @@ use std::fs::File;
 use std::io::prelude::*;
 use std::io::BufReader;
 
-use failure::{Error, ResultExt};
+use failure::{Error, Fail, ResultExt};
 
 pub const BOARD_SQL: &str = include_str!("sql/boards.sql");
 pub const COMMON_SQL: &str = include_str!("sql/common.sql");
@@ -42,9 +42,9 @@ pub fn parse_config() -> Result<Config, Error> {
     Ok(toml::from_str(&contents).context("Could not parse config.toml")?)
 }
 
-pub fn print_error(err: &Error) {
-    let mut pretty = err.to_string();
-    for cause in err.iter_causes() {
+pub fn print_fail(fail: &Fail) {
+    let mut pretty = fail.to_string();
+    for cause in fail.iter_causes() {
         pretty.push_str(": ");
         pretty.push_str(&cause.to_string());
     }

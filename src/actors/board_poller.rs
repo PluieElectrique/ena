@@ -3,7 +3,7 @@ use std::time::Duration;
 use actix::prelude::*;
 use futures::prelude::*;
 
-use four_chan;
+use {four_chan, print_fail};
 
 pub struct BoardPoller {
     board: four_chan::Board,
@@ -96,15 +96,14 @@ impl BoardPoller {
             ctx.spawn(
                 fetcher
                     .send(four_chan::FetchThreads(act.board))
-                    // TODO: better error handling
-                    .map_err(|e| println!("{}", e))
+                    .map_err(|err| print_fail(&err))
                     .into_actor(act)
-                    .map(|threads, act, _ctx| {
-                        let now = ::std::time::Instant::now();
-                        println!("Fetched threads at {:?}\n{:?}", now, threads);
-                        if let Ok(threads) = threads {
+                    .map(|threads, act, _ctx| match threads {
+                        Ok(threads) => {
                             act.update_threads(threads);
+                            debug!("Fetched and updated threads from {}", act.board);
                         }
+                        Err(err) => print_fail(err.as_fail()),
                     }),
             );
             act.poll(ctx);

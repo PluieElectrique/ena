@@ -4,11 +4,11 @@ use std::default::Default;
 use std::fmt;
 
 use actix::prelude::*;
+use failure::{Error, ResultExt};
 use futures::prelude::*;
 use hyper;
 use hyper::client::{Client, HttpConnector};
 use hyper_tls::HttpsConnector;
-use serde::de::Error;
 use serde::{Deserialize, Deserializer};
 use serde_json;
 
@@ -36,25 +36,32 @@ impl SystemService for Fetcher {}
 fn get_uri(path: String) -> hyper::Uri {
     let mut uri = String::from(API_PREFIX);
     uri.push_str(&path);
-    uri.parse().expect("Could not parse URI")
+    uri.parse().unwrap_or_else(|err| {
+        panic!("Could not parse URI {}: {}", uri, err);
+    })
 }
 
+// TODO: Using Error for Fetcher might be too expensive. If hyper errors are common enough, we
+// should use #[derive(Fail)] or Error/ErrorKind instead
+
+#[derive(Debug)]
 pub struct FetchThread(pub Board, pub u64);
 impl Message for FetchThread {
-    type Result = Result<Vec<Post>, hyper::Error>;
+    type Result = Result<Vec<Post>, Error>;
 }
 
 impl Handler<FetchThread> for Fetcher {
-    type Result = ResponseFuture<Vec<Post>, hyper::Error>;
+    type Result = ResponseFuture<Vec<Post>, Error>;
 
     fn handle(&mut self, msg: FetchThread, _ctx: &mut Self::Context) -> Self::Result {
         Box::new(
             self.client
                 .get(get_uri(format!("{}/thread/{}.json", msg.0, msg.1)))
                 .and_then(|res| res.into_body().concat2())
-                .and_then(|body| {
-                    let PostsWrapper { posts } =
-                        serde_json::from_slice(&body).expect("Deserializing a thread failed");
+                .map_err(|e| e.into())
+                .and_then(move |body| {
+                    let PostsWrapper { posts } = serde_json::from_slice(&body)
+                        .context(format!("Failed to deserialize a post: {:?}", msg))?;
                     Ok(posts)
                 }),
         )
@@ -63,19 +70,20 @@ impl Handler<FetchThread> for Fetcher {
 
 pub struct FetchThreads(pub Board);
 impl Message for FetchThreads {
-    type Result = Result<Vec<Thread>, hyper::Error>;
+    type Result = Result<Vec<Thread>, Error>;
 }
 
 impl Handler<FetchThreads> for Fetcher {
-    type Result = ResponseFuture<Vec<Thread>, hyper::Error>;
+    type Result = ResponseFuture<Vec<Thread>, Error>;
     fn handle(&mut self, msg: FetchThreads, _ctx: &mut Self::Context) -> Self::Result {
         Box::new(
             self.client
                 .get(get_uri(format!("{}/threads.json", msg.0)))
                 .and_then(|res| res.into_body().concat2())
-                .and_then(|body| {
-                    let threads: Vec<ThreadPage> =
-                        serde_json::from_slice(&body).expect("Deserializing threads.json failed");
+                .map_err(|e| e.into())
+                .and_then(move |body| {
+                    let threads: Vec<ThreadPage> = serde_json::from_slice(&body)
+                        .context(format!("Failed to deserialize threads.json from {}", msg.0))?;
                     Ok(threads.into_iter().fold(vec![], |mut acc, mut t| {
                         acc.append(&mut t.threads);
                         acc
@@ -87,18 +95,20 @@ impl Handler<FetchThreads> for Fetcher {
 
 pub struct FetchArchive(pub Board);
 impl Message for FetchArchive {
-    type Result = Result<Vec<u64>, hyper::Error>;
+    type Result = Result<Vec<u64>, Error>;
 }
 
 impl Handler<FetchArchive> for Fetcher {
-    type Result = ResponseFuture<Vec<u64>, hyper::Error>;
+    type Result = ResponseFuture<Vec<u64>, Error>;
     fn handle(&mut self, msg: FetchArchive, _ctx: &mut Self::Context) -> Self::Result {
         Box::new(
             self.client
                 .get(get_uri(format!("{}/archive.json", msg.0)))
                 .and_then(|res| res.into_body().concat2())
-                .and_then(|body| {
-                    Ok(serde_json::from_slice(&body).expect("Deserializing the archive failed"))
+                .map_err(|e| e.into())
+                .and_then(move |body| {
+                    Ok(serde_json::from_slice(&body)
+                        .context(format!("Failed to deserialize the archive of {}", msg.0))?)
                 }),
         )
     }
@@ -199,6 +209,7 @@ where
     } else if n == 0 {
         Ok(false)
     } else {
+        use serde::de::Error;
         Err(D::Error::custom("Numeric boolean was not 0 or 1"))
     }
 }
