@@ -20,7 +20,7 @@ fn main() {
     pretty_env_logger::init();
 
     let config = parse_config().unwrap_or_else(|err| {
-        print_fail(err.as_fail());
+        log_error(err.as_fail());
         process::exit(1);
     });
     let board = config.boards[0];

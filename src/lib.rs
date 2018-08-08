@@ -54,11 +54,20 @@ pub fn parse_config() -> Result<Config, Error> {
     Ok(toml::from_str(&contents).context("Could not parse config.toml")?)
 }
 
-pub fn print_fail(fail: &Fail) {
+pub fn log_error(fail: &Fail) {
     let mut pretty = fail.to_string();
     for cause in fail.iter_causes() {
         pretty.push_str(": ");
         pretty.push_str(&cause.to_string());
     }
     error!("{}", pretty);
+}
+
+pub fn log_warn(fail: &Fail) {
+    let mut pretty = fail.to_string();
+    for cause in fail.iter_causes() {
+        pretty.push_str(": ");
+        pretty.push_str(&cause.to_string());
+    }
+    warn!("{}", pretty);
 }
