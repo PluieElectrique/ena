@@ -37,8 +37,7 @@ pub struct Post {
     pub trip: Option<String>,
     /// Displays if board has DISPLAY_ID set
     pub id: Option<String>,
-    #[serde(default = "capcode_default")]
-    pub capcode: String,
+    pub capcode: Option<String>,
     pub country: Option<String>,
     #[serde(rename = "sub")]
     pub subject: Option<String>,
@@ -85,10 +84,6 @@ pub struct PostImage {
     #[serde(deserialize_with = "num_to_bool")]
     #[serde(default)]
     pub spoiler: bool,
-}
-
-fn capcode_default() -> String {
-    String::from("N")
 }
 
 fn num_to_bool<'de, D>(deserializer: D) -> Result<bool, D::Error>
