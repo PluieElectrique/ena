@@ -57,6 +57,8 @@ use std::io::BufReader;
 
 use failure::{Error, ResultExt};
 
+pub const BOARD_REPLACE: &str = "%%BOARD%%";
+pub const CHARSET_REPLACE: &str = "%%CHARSET%%";
 pub const BOARD_SQL: &str = include_str!("sql/boards.sql");
 pub const COMMON_SQL: &str = include_str!("sql/common.sql");
 

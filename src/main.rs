@@ -37,8 +37,8 @@ fn main() {
     println!("Showing 5 posts from {}", board);
 
     let board_sql = BOARD_SQL
-        .replace("%%CHARSET%%", &config.charset)
-        .replace("%%BOARD%%", &board.to_string());
+        .replace(CHARSET_REPLACE, &config.charset)
+        .replace(BOARD_REPLACE, &board.to_string());
     let future = pool
         .get_conn()
         .and_then(|conn| conn.drop_query(board_sql))
