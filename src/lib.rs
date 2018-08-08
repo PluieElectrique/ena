@@ -68,6 +68,12 @@ pub struct Config {
     pub poll_interval: u64,
 }
 
+#[derive(Debug, Fail)]
+pub enum ConfigError {
+    #[fail(display = "`poll_interval` must be at least 1 second")]
+    ZeroPollInterval,
+}
+
 pub fn parse_config() -> Result<Config, Error> {
     let file = File::open("config.toml").context("Could not open config.toml")?;
     let mut buf_reader = BufReader::new(file);
@@ -76,5 +82,11 @@ pub fn parse_config() -> Result<Config, Error> {
         .read_to_string(&mut contents)
         .context("Could not read config.toml")?;
 
-    Ok(toml::from_str(&contents).context("Could not parse config.toml")?)
+    let toml: Config = toml::from_str(&contents).context("Could not parse config.toml")?;
+    if toml.poll_interval == 0 {
+        return Err(ConfigError::ZeroPollInterval.into());
+    } else if toml.poll_interval < 10 {
+        warn!("4chan API rules recommend a minimum `poll_interval` of 10 seconds");
+    }
+    Ok(toml)
 }
