@@ -1,8 +1,12 @@
 extern crate actix;
+#[macro_use]
 extern crate ena;
+extern crate failure;
 extern crate futures;
 extern crate hyper;
 extern crate hyper_tls;
+#[macro_use]
+extern crate log;
 extern crate mysql_async as my;
 extern crate pretty_env_logger;
 extern crate serde_json;
@@ -20,7 +24,7 @@ fn main() {
     pretty_env_logger::init();
 
     let config = parse_config().unwrap_or_else(|err| {
-        log_error(err.as_fail());
+        log_error!(err.as_fail());
         process::exit(1);
     });
     let board = config.boards[0];

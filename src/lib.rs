@@ -23,6 +23,31 @@ macro_rules! impl_enum_from {
     };
 }
 
+#[macro_export]
+macro_rules! log_error {
+    ($fail:expr) => ({
+        let fail: &::failure::Fail = $fail;
+        let mut pretty = fail.to_string();
+        for cause in fail.iter_causes() {
+            pretty.push_str(": ");
+            pretty.push_str(&cause.to_string());
+        }
+        error!("{}", pretty);
+    })
+}
+#[macro_export]
+macro_rules! log_warn {
+    ($fail:expr) => ({
+        let fail: &::failure::Fail = $fail;
+        let mut pretty = fail.to_string();
+        for cause in fail.iter_causes() {
+            pretty.push_str(": ");
+            pretty.push_str(&cause.to_string());
+        }
+        warn!("{}", pretty);
+    })
+}
+
 pub mod actors;
 pub mod four_chan;
 
@@ -30,7 +55,7 @@ use std::fs::File;
 use std::io::prelude::*;
 use std::io::BufReader;
 
-use failure::{Error, Fail, ResultExt};
+use failure::{Error, ResultExt};
 
 pub const BOARD_SQL: &str = include_str!("sql/boards.sql");
 pub const COMMON_SQL: &str = include_str!("sql/common.sql");
@@ -52,22 +77,4 @@ pub fn parse_config() -> Result<Config, Error> {
         .context("Could not read config.toml")?;
 
     Ok(toml::from_str(&contents).context("Could not parse config.toml")?)
-}
-
-pub fn log_error(fail: &Fail) {
-    let mut pretty = fail.to_string();
-    for cause in fail.iter_causes() {
-        pretty.push_str(": ");
-        pretty.push_str(&cause.to_string());
-    }
-    error!("{}", pretty);
-}
-
-pub fn log_warn(fail: &Fail) {
-    let mut pretty = fail.to_string();
-    for cause in fail.iter_causes() {
-        pretty.push_str(": ");
-        pretty.push_str(&cause.to_string());
-    }
-    warn!("{}", pretty);
 }

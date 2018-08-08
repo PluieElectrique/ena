@@ -5,7 +5,6 @@ use futures::prelude::*;
 
 use four_chan;
 use four_chan::fetcher::{FetchError, FetchThreads, Fetcher};
-use {log_error, log_warn};
 
 pub struct BoardPoller {
     board: four_chan::Board,
@@ -98,7 +97,7 @@ impl BoardPoller {
             ctx.spawn(
                 fetcher
                     .send(FetchThreads(act.board))
-                    .map_err(|err| log_error(&err))
+                    .map_err(|err| log_error!(&err))
                     .into_actor(act)
                     .map(|threads, act, _ctx| match threads {
                         Ok(threads) => {
@@ -107,9 +106,9 @@ impl BoardPoller {
                         }
                         Err(err) => {
                             if let FetchError::NotModified = err {
-                                log_warn(&err);
+                                log_warn!(&err);
                             } else {
-                                log_error(&err);
+                                log_error!(&err);
                             }
                         }
                     }),
