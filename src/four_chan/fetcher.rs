@@ -155,8 +155,18 @@ impl Handler<FetchThread> for Fetcher {
         Box::new(
             self.client
                 .get(get_uri(&format!("{}/thread/{}.json", msg.0, msg.1)))
-                .and_then(|res| res.into_body().concat2())
                 .from_err()
+                .and_then(|res| {
+                    if StatusCode::OK == res.status() {
+                        future::ok(res)
+                    } else if StatusCode::NOT_MODIFIED == res.status() {
+                        warn!("304 Not Modified on thread fetch. Is last_modified in threads.json being checked?");
+                        future::err(FetchError::NotModified)
+                    } else {
+                        future::err(FetchError::BadStatus(res.status().to_string()))
+                    }
+                })
+                .and_then(|res| res.into_body().concat2().from_err())
                 .and_then(move |body| {
                     let PostsWrapper { posts } = serde_json::from_slice(&body)?;
                     Ok(posts)
