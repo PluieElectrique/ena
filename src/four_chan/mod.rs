@@ -26,65 +26,65 @@ struct PostsWrapper {
 #[derive(Debug, Deserialize)]
 pub struct Post {
     // Required fields
-    no: u64,
+    pub no: u64,
     #[serde(rename = "resto")]
-    reply_to: u64,
-    time: u64,
+    pub reply_to: u64,
+    pub time: u64,
 
     // Optional fields
     /// Only blank when name is blank and trip is provided
-    name: Option<String>,
-    trip: Option<String>,
+    pub name: Option<String>,
+    pub trip: Option<String>,
     /// Displays if board has DISPLAY_ID set
-    id: Option<String>,
+    pub id: Option<String>,
     #[serde(default = "capcode_default")]
-    capcode: String,
-    country: Option<String>,
+    pub capcode: String,
+    pub country: Option<String>,
     #[serde(rename = "sub")]
-    subject: Option<String>,
+    pub subject: Option<String>,
     #[serde(rename = "com")]
-    comment: Option<String>,
-    #[serde(rename = "tim")]
-    time_millis: Option<u64>,
+    pub comment: Option<String>,
 
     // OP-only fields
     #[serde(deserialize_with = "num_to_bool")]
     #[serde(default)]
-    sticky: bool,
+    pub sticky: bool,
     #[serde(deserialize_with = "num_to_bool")]
     #[serde(default)]
-    closed: bool,
+    pub closed: bool,
     #[serde(deserialize_with = "num_to_bool")]
     #[serde(default)]
-    archived: bool,
-    archived_on: Option<u64>,
+    pub archived: bool,
+    pub archived_on: Option<u64>,
 
     #[serde(flatten)]
-    image: Option<PostImage>,
+    pub image: Option<PostImage>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct PostImage {
-    filename: String,
-    ext: String,
+    pub filename: String,
+    pub ext: String,
+    #[serde(rename = "tim")]
+    pub time_millis: u64,
     #[serde(rename = "fsize")]
-    filesize: u32,
-    md5: String,
+    pub filesize: u32,
+    pub md5: String,
     #[serde(rename = "w")]
-    image_width: u16,
+    pub image_width: u16,
     #[serde(rename = "h")]
-    image_height: u16,
+    pub image_height: u16,
     #[serde(rename = "tn_w")]
-    thumbnail_width: u8,
+    pub thumbnail_width: u8,
     #[serde(rename = "tn_h")]
-    thumbnail_height: u8,
+    pub thumbnail_height: u8,
     #[serde(rename = "filedeleted")]
     #[serde(deserialize_with = "num_to_bool")]
     #[serde(default)]
-    file_deleted: bool,
+    pub file_deleted: bool,
     #[serde(deserialize_with = "num_to_bool")]
     #[serde(default)]
-    spoiler: bool,
+    pub spoiler: bool,
 }
 
 fn capcode_default() -> String {
