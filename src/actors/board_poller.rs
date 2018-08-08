@@ -65,12 +65,12 @@ impl BoardPoller {
                             curr_thread = curr_iter.next();
                         } else if prev.no > curr.no {
                             // Is it possible for an old thread to be added back?
-                            // TODO: better error handling/logging
-                            println!(
+                            error!(
                                 "A previously removed thread ({}) from /{}/ has reappeared!",
                                 curr.no, self.board
                             );
-                            new_threads.push(curr.no);
+                            // Let's not add it to new_threads. If it really hangs around, it will
+                            // get added next poll
                             curr_thread = curr_iter.next();
                         }
                     }
