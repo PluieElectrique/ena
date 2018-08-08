@@ -28,8 +28,9 @@ impl Fetcher {
         key: K,
     ) -> impl Future<Item = hyper::Chunk, Error = FetchError> {
         let mut request = hyper::Request::get(uri).body(Body::default()).unwrap();
+        let key = key.into();
 
-        let last_fetched = self.last_fetched.insert(key.into(), Utc::now());
+        let last_fetched = self.last_fetched.get(&key).cloned();
         if let Some(last_fetched) = last_fetched {
             let last_fetched = HeaderValue::from_str(
                 last_fetched.format(RFC_1123_FORMAT).to_string().as_str(),
@@ -68,7 +69,12 @@ impl Fetcher {
                     future::err(FetchError::BadStatus(res.status().to_string()))
                 }
             })
-            .and_then(|res| res.into_body().concat2().from_err())
+            .and_then(move |res| {
+                let myself = System::current().registry().get::<Self>();
+                myself
+                    .send(UpdateLastFetched(key, Utc::now()))
+                    .then(|_| res.into_body().concat2().from_err())
+            })
     }
 }
 
@@ -125,6 +131,17 @@ pub enum FetchError {
 }
 impl_enum_from!(hyper::Error, FetchError, HyperError);
 impl_enum_from!(serde_json::Error, FetchError, JsonError);
+
+#[derive(Message)]
+struct UpdateLastFetched(FetchKey, DateTime<Utc>);
+
+impl Handler<UpdateLastFetched> for Fetcher {
+    type Result = ();
+
+    fn handle(&mut self, msg: UpdateLastFetched, _ctx: &mut Self::Context) {
+        self.last_fetched.insert(msg.0, msg.1);
+    }
+}
 
 #[derive(Debug)]
 pub struct FetchThread(pub Board, pub u64);
