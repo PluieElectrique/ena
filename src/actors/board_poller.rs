@@ -3,7 +3,8 @@ use std::time::Duration;
 use actix::prelude::*;
 use futures::prelude::*;
 
-use four_chan::{self, FetchError};
+use four_chan;
+use four_chan::fetcher::{FetchError, FetchThreads, Fetcher};
 use {log_error, log_warn};
 
 pub struct BoardPoller {
@@ -93,10 +94,10 @@ impl BoardPoller {
 
     fn poll(&self, ctx: &mut Context<Self>) {
         ctx.run_later(Duration::new(self.interval, 0), |act, ctx| {
-            let fetcher = System::current().registry().get::<four_chan::Fetcher>();
+            let fetcher = System::current().registry().get::<Fetcher>();
             ctx.spawn(
                 fetcher
-                    .send(four_chan::FetchThreads(act.board))
+                    .send(FetchThreads(act.board))
                     .map_err(|err| log_error(&err))
                     .into_actor(act)
                     .map(|threads, act, _ctx| match threads {

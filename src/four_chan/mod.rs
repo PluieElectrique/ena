@@ -4,9 +4,7 @@ use std::fmt;
 
 use serde::{Deserialize, Deserializer};
 
-mod fetcher;
-
-pub use self::fetcher::*;
+pub mod fetcher;
 
 #[derive(Deserialize)]
 struct ThreadPage {
