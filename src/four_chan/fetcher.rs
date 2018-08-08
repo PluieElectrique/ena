@@ -51,11 +51,10 @@ impl Fetcher {
                         .unwrap();
 
                     if last_fetched > last_modified {
-                        let now = Utc::now();
                         warn!(
-                            "API returned old data: last fetched {} ago, last modified {} ago",
-                            now - last_fetched,
-                            now - last_modified,
+                            "API returned old data: If-Modified-Since: {}, but Last-Modified: {}",
+                            last_fetched.format(RFC_1123_FORMAT),
+                            last_modified.format(RFC_1123_FORMAT),
                         );
                         return future::err(FetchError::NotModified);
                     }
