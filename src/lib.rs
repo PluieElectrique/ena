@@ -25,7 +25,7 @@ macro_rules! impl_enum_from {
 
 #[macro_export]
 macro_rules! log_error {
-    ($fail:expr) => ({
+    ($fail:expr) => {{
         let fail: &::failure::Fail = $fail;
         let mut pretty = fail.to_string();
         for cause in fail.iter_causes() {
@@ -33,11 +33,11 @@ macro_rules! log_error {
             pretty.push_str(&cause.to_string());
         }
         error!("{}", pretty);
-    })
+    }};
 }
 #[macro_export]
 macro_rules! log_warn {
-    ($fail:expr) => ({
+    ($fail:expr) => {{
         let fail: &::failure::Fail = $fail;
         let mut pretty = fail.to_string();
         for cause in fail.iter_causes() {
@@ -45,7 +45,7 @@ macro_rules! log_warn {
             pretty.push_str(&cause.to_string());
         }
         warn!("{}", pretty);
-    })
+    }};
 }
 
 pub mod actors;
