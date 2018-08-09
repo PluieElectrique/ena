@@ -89,6 +89,8 @@ pub fn parse_config() -> Result<Config, Error> {
         return Err(ConfigError::ZeroPollInterval.into());
     } else if toml.poll_interval < 10 {
         warn!("4chan API rules recommend a minimum `poll_interval` of 10 seconds");
+    } else if toml.poll_interval > 1800 {
+        warn!("A `poll_interval` of more than 30min may result in lost data");
     }
     Ok(toml)
 }
