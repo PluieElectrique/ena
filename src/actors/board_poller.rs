@@ -102,7 +102,7 @@ impl BoardPoller {
                     .map(|threads, act, _ctx| match threads {
                         Ok(threads) => {
                             act.update_threads(threads);
-                            debug!("Fetched and updated threads from {}", act.board);
+                            debug!("Fetched and updated threads from /{}/", act.board);
                         }
                         Err(err) => {
                             if let FetchError::NotModified = err {

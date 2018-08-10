@@ -34,7 +34,7 @@ fn main() {
     let sys = System::new("ena");
     BoardPoller::new(board, config.poll_interval, vec![]).start();
 
-    println!("Showing 5 posts from {}", board);
+    println!("Showing 5 posts from /{}/", board);
 
     let board_sql = BOARD_SQL
         .replace(CHARSET_REPLACE, &config.charset)
