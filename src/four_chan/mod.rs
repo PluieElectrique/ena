@@ -8,6 +8,7 @@ pub mod fetcher;
 
 #[derive(Deserialize)]
 struct ThreadPage {
+    page: u8,
     threads: Vec<Thread>,
 }
 
@@ -15,6 +16,10 @@ struct ThreadPage {
 pub struct Thread {
     pub no: u64,
     pub last_modified: u64,
+    #[serde(skip_deserializing)]
+    pub page: u8,
+    #[serde(skip_deserializing)]
+    pub bump_index: u8,
 }
 
 #[derive(Deserialize)]

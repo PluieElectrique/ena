@@ -66,6 +66,7 @@ pub const COMMON_SQL: &str = include_str!("sql/common.sql");
 pub struct Config {
     pub boards: Vec<four_chan::Board>,
     pub poll_interval: u64,
+    pub deleted_page_threshold: u8,
     pub database_url: String,
     pub charset: String,
 }
@@ -74,6 +75,8 @@ pub struct Config {
 pub enum ConfigError {
     #[fail(display = "`poll_interval` must be at least 1 second (preferably 10 seconds or more)")]
     ZeroPollInterval,
+    #[fail(display = "`deleted_page_threshold` must be a number from 0-10")]
+    OutOfRangeThreshold,
 }
 
 pub fn parse_config() -> Result<Config, Error> {
@@ -94,5 +97,9 @@ pub fn parse_config() -> Result<Config, Error> {
     } else if toml.poll_interval > 1800 {
         warn!("A `poll_interval` of more than 30min may result in lost data");
     }
+    if toml.deleted_page_threshold > 10 {
+        return Err(ConfigError::OutOfRangeThreshold.into());
+    }
+
     Ok(toml)
 }

@@ -32,7 +32,12 @@ fn main() {
     let pool = my::Pool::new(config.database_url);
 
     let sys = System::new("ena");
-    BoardPoller::new(board, config.poll_interval, vec![]).start();
+    BoardPoller::new(
+        board,
+        config.poll_interval,
+        config.deleted_page_threshold,
+        vec![],
+    ).start();
 
     println!("Showing 5 posts from /{}/", board);
 

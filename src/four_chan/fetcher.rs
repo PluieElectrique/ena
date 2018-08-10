@@ -191,10 +191,17 @@ impl Handler<FetchThreads> for Fetcher {
             self.fetch_with_last_modified(get_uri(&format!("{}/threads.json", msg.0)), msg)
                 .and_then(move |body| {
                     let threads: Vec<ThreadPage> = serde_json::from_slice(&body)?;
-                    Ok(threads.into_iter().fold(vec![], |mut acc, mut t| {
-                        acc.append(&mut t.threads);
+                    let mut threads = threads.into_iter().fold(vec![], |mut acc, mut page| {
+                        for thread in &mut page.threads {
+                            thread.page = page.page;
+                        }
+                        acc.append(&mut page.threads);
                         acc
-                    }))
+                    });
+                    for (i, thread) in threads.iter_mut().enumerate() {
+                        thread.bump_index = i as u8;
+                    }
+                    Ok(threads)
                 }),
         )
     }
