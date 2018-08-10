@@ -18,7 +18,7 @@ const RFC_1123_FORMAT: &str = "%a, %d %b %Y %T GMT";
 
 pub struct Fetcher {
     client: Client<HttpsConnector<HttpConnector>>,
-    last_fetched: HashMap<FetchKey, DateTime<Utc>>,
+    last_modified: HashMap<FetchKey, DateTime<Utc>>,
 }
 
 impl Fetcher {
@@ -30,48 +30,49 @@ impl Fetcher {
         let mut request = hyper::Request::get(uri).body(Body::default()).unwrap();
         let key = key.into();
 
-        let last_fetched = self.last_fetched.get(&key).cloned();
-        if let Some(last_fetched) = last_fetched {
-            let last_fetched = HeaderValue::from_str(
-                last_fetched.format(RFC_1123_FORMAT).to_string().as_str(),
-            ).unwrap();
-            request
-                .headers_mut()
-                .insert(header::IF_MODIFIED_SINCE, last_fetched);
-        }
+        let last_modified = self
+            .last_modified
+            .get(&key)
+            .cloned()
+            .unwrap_or_else(|| Utc.timestamp(1_065_062_160, 0));
+        request.headers_mut().insert(
+            header::IF_MODIFIED_SINCE,
+            HeaderValue::from_str(last_modified.format(RFC_1123_FORMAT).to_string().as_str())
+                .unwrap(),
+        );
         self.client
             .request(request)
             .from_err()
             .and_then(move |res| {
-                if let (Some(last_fetched), Some(last_modified)) =
-                    (last_fetched, res.headers().get(header::LAST_MODIFIED))
-                {
-                    let last_modified = Utc
-                        .datetime_from_str(last_modified.to_str().unwrap(), RFC_1123_FORMAT)
-                        .unwrap();
+                let new_modified = res
+                    .headers()
+                    .get(header::LAST_MODIFIED)
+                    .map(|new| {
+                        Utc.datetime_from_str(new.to_str().unwrap(), RFC_1123_FORMAT)
+                            .unwrap()
+                    })
+                    .unwrap_or_else(Utc::now);
 
-                    if last_fetched > last_modified {
-                        warn!(
-                            "API returned old data: If-Modified-Since: {}, but Last-Modified: {}",
-                            last_fetched.format(RFC_1123_FORMAT),
-                            last_modified.format(RFC_1123_FORMAT),
-                        );
-                        return future::err(FetchError::NotModified);
+                match res.status() {
+                    StatusCode::NOT_MODIFIED => future::err(FetchError::NotModified),
+                    StatusCode::OK => {
+                        if last_modified > new_modified {
+                            warn!(
+                                "API sent old data: If-Modified-Since: {}, but Last-Modified: {}",
+                                last_modified.format(RFC_1123_FORMAT),
+                                new_modified.format(RFC_1123_FORMAT),
+                            );
+                            return future::err(FetchError::NotModified);
+                        }
+                        future::ok((res, new_modified))
                     }
-                }
-
-                if StatusCode::OK == res.status() {
-                    future::ok(res)
-                } else if StatusCode::NOT_MODIFIED == res.status() {
-                    future::err(FetchError::NotModified)
-                } else {
-                    future::err(FetchError::BadStatus(res.status().to_string()))
+                    _ => future::err(FetchError::BadStatus(res.status().to_string())),
                 }
             })
-            .and_then(move |res| {
+            .and_then(move |(res, last_modified)| {
                 let myself = System::current().registry().get::<Self>();
                 myself
-                    .send(UpdateLastFetched(key, Utc::now()))
+                    .send(UpdateLastFetched(key, last_modified))
                     .then(|_| res.into_body().concat2().from_err())
             })
     }
@@ -93,7 +94,7 @@ impl Default for Fetcher {
         let client = Client::builder().build::<_, Body>(https);
         Self {
             client,
-            last_fetched: HashMap::new(),
+            last_modified: HashMap::new(),
         }
     }
 }
@@ -131,6 +132,8 @@ pub enum FetchError {
 impl_enum_from!(hyper::Error, FetchError, HyperError);
 impl_enum_from!(serde_json::Error, FetchError, JsonError);
 
+// We would like to return an ActorFuture from Fetcher, but we can't because ActorFutures can only
+// run on their own contexts. So, Fetcher must send a message to itself to update `last_modified`.
 #[derive(Message)]
 struct UpdateLastFetched(FetchKey, DateTime<Utc>);
 
@@ -138,7 +141,7 @@ impl Handler<UpdateLastFetched> for Fetcher {
     type Result = ();
 
     fn handle(&mut self, msg: UpdateLastFetched, _ctx: &mut Self::Context) {
-        self.last_fetched.insert(msg.0, msg.1);
+        self.last_modified.insert(msg.0, msg.1);
     }
 }
 
