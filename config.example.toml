@@ -1,6 +1,10 @@
+# Scraping settings
 # List of boards to scrape (note: 3 must be written as "_3")
 boards = [""]
-charset = "utf8mb4"
-database_url = "mysql://username:password@localhost/ena"
 # Seconds to wait between fetching the threads.json of each board
 poll_interval = 30
+
+
+# Database settings
+database_url = "mysql://username:password@localhost/ena"
+charset = "utf8mb4"

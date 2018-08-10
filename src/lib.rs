@@ -65,9 +65,9 @@ pub const COMMON_SQL: &str = include_str!("sql/common.sql");
 #[derive(Deserialize)]
 pub struct Config {
     pub boards: Vec<four_chan::Board>,
-    pub charset: String,
-    pub database_url: String,
     pub poll_interval: u64,
+    pub database_url: String,
+    pub charset: String,
 }
 
 #[derive(Debug, Fail)]
