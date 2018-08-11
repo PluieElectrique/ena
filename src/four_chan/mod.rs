@@ -49,7 +49,15 @@ pub struct Post {
     #[serde(rename = "com")]
     pub comment: Option<String>,
 
-    // OP-only fields
+    #[serde(flatten)]
+    pub op_data: OpData,
+
+    #[serde(flatten)]
+    pub image: Option<PostImage>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct OpData {
     #[serde(deserialize_with = "num_to_bool")]
     #[serde(default)]
     pub sticky: bool,
@@ -60,9 +68,6 @@ pub struct Post {
     #[serde(default)]
     pub archived: bool,
     pub archived_on: Option<u64>,
-
-    #[serde(flatten)]
-    pub image: Option<PostImage>,
 }
 
 #[derive(Debug, Deserialize)]

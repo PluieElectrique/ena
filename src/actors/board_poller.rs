@@ -157,8 +157,11 @@ impl BoardPoller {
 }
 
 #[derive(Message)]
-pub enum BoardUpdate {
-    NewThread(u64),
-    DeletedThread(u64),
-    ModifiedThread(u64),
+pub struct BoardUpdate(Vec<ThreadUpdate>);
+
+pub enum ThreadUpdate {
+    New(u64),
+    Modified(u64),
+    BumpedOff(u64),
+    Deleted(u64),
 }
