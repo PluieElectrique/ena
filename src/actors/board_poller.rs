@@ -133,8 +133,8 @@ impl BoardPoller {
     }
 
     fn poll(&self, ctx: &mut Context<Self>) {
-        ctx.run_later(Duration::new(self.interval, 0), |act, ctx| {
             let fetcher = System::current().registry().get::<Fetcher>();
+        ctx.run_interval(Duration::new(self.interval, 0), |act, ctx| {
             ctx.spawn(
                 fetcher
                     .send(FetchThreads(act.board))
@@ -151,7 +151,6 @@ impl BoardPoller {
                         },
                     }),
             );
-            act.poll(ctx);
         });
     }
 }
