@@ -7,15 +7,19 @@ description = "A 4chan scraper"
 license = "AGPL-3.0"
 
 [dependencies]
-actix = "0.7"
-chrono = "0.4"
+actix = { version = "0.7", default-features = false }
+chrono = { version = "0.4", default-features = false }
+chrono-tz = "0.5"
 failure = "0.1"
 futures = "0.1"
-hyper = "0.12"
+html5ever = "0.22"
+hyper = { version = "0.12", default-features = false }
 hyper-tls = "0.3"
+lazy_static = "1.1"
 log = "0.4"
 mysql_async = "0.15"
 pretty_env_logger = "0.2"
+regex = "1.0"
 serde = "1.0"
 serde_derive = "1.0"
 serde_json = "1.0"
