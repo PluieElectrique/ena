@@ -12,6 +12,7 @@ pub struct BoardPoller {
     interval: u64,
     deleted_page_threshold: u8,
     subscribers: Vec<Recipient<BoardUpdate>>,
+    fetcher: Addr<Fetcher>,
 }
 
 impl Actor for BoardPoller {
@@ -28,6 +29,7 @@ impl BoardPoller {
         interval: u64,
         deleted_page_threshold: u8,
         subscribers: Vec<Recipient<BoardUpdate>>,
+        fetcher: Addr<Fetcher>,
     ) -> Self {
         Self {
             board,
@@ -35,6 +37,7 @@ impl BoardPoller {
             interval,
             deleted_page_threshold,
             subscribers,
+            fetcher,
         }
     }
 
@@ -133,10 +136,9 @@ impl BoardPoller {
     }
 
     fn poll(&self, ctx: &mut Context<Self>) {
-            let fetcher = System::current().registry().get::<Fetcher>();
         ctx.run_interval(Duration::new(self.interval, 0), |act, ctx| {
             ctx.spawn(
-                fetcher
+                act.fetcher
                     .send(FetchThreads(act.board))
                     .map_err(|err| log_error!(&err))
                     .into_actor(act)

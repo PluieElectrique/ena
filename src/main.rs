@@ -20,6 +20,8 @@ use ena::*;
 use futures::prelude::*;
 use my::prelude::*;
 
+use four_chan::fetcher::Fetcher;
+
 fn main() {
     pretty_env_logger::init();
 
@@ -29,16 +31,18 @@ fn main() {
     });
     let board = config.boards[0];
 
-    let pool = my::Pool::new(config.database_url);
-
     let sys = System::new("ena");
+    let fetcher = Supervisor::start(|_| Fetcher::new());
+
     BoardPoller::new(
         board,
         config.poll_interval,
         config.deleted_page_threshold,
         vec![],
+        fetcher.clone(),
     ).start();
 
+    let pool = my::Pool::new(config.database_url);
     println!("Showing 5 posts from /{}/", board);
 
     let board_sql = BOARD_SQL

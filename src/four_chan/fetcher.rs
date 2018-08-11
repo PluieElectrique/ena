@@ -22,13 +22,24 @@ pub struct Fetcher {
 }
 
 impl Fetcher {
+    pub fn new() -> Self {
+        let https = HttpsConnector::new(2).expect("Could not create HttpsConnector");
+        let client = Client::builder().build::<_, Body>(https);
+        Self {
+            client,
+            last_modified: HashMap::new(),
+        }
+    }
+
     fn fetch_with_last_modified<K: Into<FetchKey>>(
         &mut self,
         uri: hyper::Uri,
         key: K,
+        ctx: &Context<Self>,
     ) -> impl Future<Item = hyper::Chunk, Error = FetchError> {
         let mut request = hyper::Request::get(uri).body(Body::default()).unwrap();
         let key = key.into();
+        let myself = ctx.address();
 
         let last_modified = self
             .last_modified
@@ -70,7 +81,6 @@ impl Fetcher {
                 }
             })
             .and_then(move |(res, last_modified)| {
-                let myself = System::current().registry().get::<Self>();
                 myself
                     .send(UpdateLastFetched(key, last_modified))
                     .then(|_| res.into_body().concat2().from_err())
@@ -88,23 +98,11 @@ enum FetchKey {
 impl_enum_from!(FetchThreads, FetchKey, Threads);
 impl_enum_from!(FetchArchive, FetchKey, Archive);
 
-impl Default for Fetcher {
-    fn default() -> Self {
-        let https = HttpsConnector::new(2).expect("Could not create HttpsConnector");
-        let client = Client::builder().build::<_, Body>(https);
-        Self {
-            client,
-            last_modified: HashMap::new(),
-        }
-    }
-}
-
 impl Actor for Fetcher {
     type Context = Context<Self>;
 }
 
 impl Supervised for Fetcher {}
-impl SystemService for Fetcher {}
 
 fn get_uri(path: &str) -> hyper::Uri {
     let mut uri = String::from(API_PREFIX);
@@ -186,9 +184,9 @@ impl Message for FetchThreads {
 
 impl Handler<FetchThreads> for Fetcher {
     type Result = ResponseFuture<Vec<Thread>, FetchError>;
-    fn handle(&mut self, msg: FetchThreads, _ctx: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, msg: FetchThreads, ctx: &mut Self::Context) -> Self::Result {
         Box::new(
-            self.fetch_with_last_modified(get_uri(&format!("{}/threads.json", msg.0)), msg)
+            self.fetch_with_last_modified(get_uri(&format!("{}/threads.json", msg.0)), msg, ctx)
                 .and_then(move |body| {
                     let threads: Vec<ThreadPage> = serde_json::from_slice(&body)?;
                     let mut threads = threads.into_iter().fold(vec![], |mut acc, mut page| {
@@ -215,9 +213,9 @@ impl Message for FetchArchive {
 
 impl Handler<FetchArchive> for Fetcher {
     type Result = ResponseFuture<Vec<u64>, FetchError>;
-    fn handle(&mut self, msg: FetchArchive, _ctx: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, msg: FetchArchive, ctx: &mut Self::Context) -> Self::Result {
         Box::new(
-            self.fetch_with_last_modified(get_uri(&format!("{}/archive.json", msg.0)), msg)
+            self.fetch_with_last_modified(get_uri(&format!("{}/archive.json", msg.0)), msg, ctx)
                 .and_then(move |body| Ok(serde_json::from_slice(&body)?)),
         )
     }
