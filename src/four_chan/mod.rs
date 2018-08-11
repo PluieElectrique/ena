@@ -27,7 +27,7 @@ struct PostsWrapper {
     posts: Vec<Post>,
 }
 
-/// Some fields aren't used, and thus are omitted.
+// Some fields aren't used, and thus are omitted.
 #[derive(Debug, Deserialize)]
 pub struct Post {
     // Required fields
