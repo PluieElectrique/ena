@@ -136,21 +136,24 @@ impl BoardPoller {
     }
 
     fn poll(&self, ctx: &mut Context<Self>) {
-        ctx.run_interval(Duration::new(self.interval, 0), |act, ctx| {
+        ctx.run_later(Duration::new(self.interval, 0), |act, ctx| {
             ctx.spawn(
                 act.fetcher
                     .send(FetchThreads(act.board))
                     .map_err(|err| log_error!(&err))
                     .into_actor(act)
-                    .map(|threads, act, _ctx| match threads {
-                        Ok(threads) => {
-                            act.update_threads(threads);
-                            debug!("Fetched and updated threads from /{}/", act.board);
+                    .map(|threads, act, ctx| {
+                        match threads {
+                            Ok(threads) => {
+                                act.update_threads(threads);
+                                debug!("Fetched and updated threads from /{}/", act.board);
+                            }
+                            Err(err) => match err {
+                                FetchError::NotModified => {}
+                                _ => error!("{}", err),
+                            },
                         }
-                        Err(err) => match err {
-                            FetchError::NotModified => {}
-                            _ => error!("{}", err),
-                        },
+                        act.poll(ctx);
                     }),
             );
         });
