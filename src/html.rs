@@ -112,8 +112,9 @@ impl FourChanTag {
 
         if &TagType::Start == tag_type {
             if let Fortune(Some(color)) = self {
-                w.write_all(b" color=")?;
+                w.write_all(b" color=\"")?;
                 w.write_all(color.as_bytes())?;
+                w.write_all(b"\"")?;
             }
         }
         w.write_all(b"]")
