@@ -126,6 +126,9 @@ pub enum FetchError {
 
     #[fail(display = "Resource not modified")]
     NotModified,
+
+    #[fail(display = "API returned empty data")]
+    Empty,
 }
 impl_enum_from!(hyper::Error, FetchError, HyperError);
 impl_enum_from!(serde_json::Error, FetchError, JsonError);
@@ -168,7 +171,11 @@ impl Handler<FetchThread> for Fetcher {
                 .and_then(|res| res.into_body().concat2().from_err())
                 .and_then(move |body| {
                     let PostsWrapper { posts } = serde_json::from_slice(&body)?;
-                    Ok(posts)
+                    if posts.is_empty() {
+                        Err(FetchError::Empty)
+                    } else {
+                        Ok(posts)
+                    }
                 }),
         )
     }
@@ -197,7 +204,11 @@ impl Handler<FetchThreads> for Fetcher {
                     for (i, thread) in threads.iter_mut().enumerate() {
                         thread.bump_index = i as u8;
                     }
-                    Ok(threads)
+                    if threads.is_empty() {
+                        Err(FetchError::Empty)
+                    } else {
+                        Ok(threads)
+                    }
                 }),
         )
     }
@@ -214,7 +225,14 @@ impl Handler<FetchArchive> for Fetcher {
     fn handle(&mut self, msg: FetchArchive, ctx: &mut Self::Context) -> Self::Result {
         Box::new(
             self.fetch_with_last_modified(get_uri(&format!("{}/archive.json", msg.0)), msg, ctx)
-                .and_then(move |body| Ok(serde_json::from_slice(&body)?)),
+                .and_then(move |body| {
+                    let archive: Vec<u64> = serde_json::from_slice(&body)?;
+                    if archive.is_empty() {
+                        Err(FetchError::Empty)
+                    } else {
+                        Ok(archive)
+                    }
+                }),
         )
     }
 }
