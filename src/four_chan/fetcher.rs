@@ -77,7 +77,7 @@ impl Fetcher {
                         }
                         future::ok((res, new_modified))
                     }
-                    _ => future::err(FetchError::BadStatus(res.status().to_string())),
+                    _ => future::err(FetchError::BadStatus(res.status())),
                 }
             })
             .and_then(move |(res, last_modified)| {
@@ -119,7 +119,7 @@ pub enum FetchError {
     HyperError(#[cause] hyper::Error),
 
     #[fail(display = "Bad status: {}", _0)]
-    BadStatus(String),
+    BadStatus(hyper::StatusCode),
 
     #[fail(display = "JSON error: {}", _0)]
     JsonError(#[cause] serde_json::Error),
@@ -157,15 +157,13 @@ impl Handler<FetchThread> for Fetcher {
             self.client
                 .get(get_uri(&format!("{}/thread/{}.json", msg.0, msg.1)))
                 .from_err()
-                .and_then(|res| {
-                    if StatusCode::OK == res.status() {
-                        future::ok(res)
-                    } else if StatusCode::NOT_MODIFIED == res.status() {
+                .and_then(|res| match res.status() {
+                    StatusCode::OK => future::ok(res),
+                    StatusCode::NOT_MODIFIED => {
                         warn!("304 Not Modified on thread fetch. Is last_modified in threads.json being checked?");
                         future::err(FetchError::NotModified)
-                    } else {
-                        future::err(FetchError::BadStatus(res.status().to_string()))
                     }
+                    _ => future::err(FetchError::BadStatus(res.status())),
                 })
                 .and_then(|res| res.into_body().concat2().from_err())
                 .and_then(move |body| {
