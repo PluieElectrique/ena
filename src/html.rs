@@ -46,7 +46,7 @@ enum TagType {
     End,
 }
 
-pub enum FourChanTag {
+enum FourChanTag {
     /// (USER WAS BANNED FOR THIS POST)
     Banned,
     /// `<b>` and `<span class="mu-s">` on /qst/
