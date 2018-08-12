@@ -3,10 +3,15 @@ extern crate chrono;
 #[macro_use]
 extern crate failure;
 extern crate futures;
+#[macro_use]
+extern crate html5ever;
 extern crate hyper;
 extern crate hyper_tls;
 #[macro_use]
+extern crate lazy_static;
+#[macro_use]
 extern crate log;
+extern crate regex;
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;
@@ -50,6 +55,7 @@ macro_rules! log_warn {
 
 pub mod actors;
 pub mod four_chan;
+pub mod html;
 
 use std::fs::File;
 use std::io::prelude::*;
