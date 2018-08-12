@@ -32,8 +32,8 @@ fn main() {
     let board = config.boards[0];
 
     let sys = System::new("ena");
-    let fetcher = Supervisor::start(|_| Fetcher::new());
-
+    let fetcher = Fetcher::new().start();
+    let thread_updater = ThreadUpdater::new(board, fetcher.clone()).start();
     BoardPoller::new(
         board,
         config.poll_interval,
