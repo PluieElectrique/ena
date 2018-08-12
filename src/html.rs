@@ -13,10 +13,33 @@ use self::FourChanTag::*;
 lazy_static! {
     static ref FORTUNE_COLOR: Regex = Regex::new(r"color:(#[[:xdigit:]]{3,6})").unwrap();
     static ref BANNED_COLOR: Regex = Regex::new(r"color:\s*red").unwrap();
+
+    static ref AMP_ENTITY: Regex = Regex::new(r"&amp;").unwrap();
+    static ref APOS_ENTITY: Regex = Regex::new(r"&#039;").unwrap();
+    static ref GT_ENTITY: Regex = Regex::new(r"&gt;").unwrap();
+    static ref LT_ENTITY: Regex = Regex::new(r"&lt;").unwrap();
+    static ref QUOT_ENTITY: Regex = Regex::new(r"&quot;").unwrap();
+}
+
+/// Unescape a few HTML entities (only used on subjects and names). This is mainly for Asagi
+/// database compatibility with names in the `users` table, since these characters get re-escaped by
+/// FoolFuuka anyways.
+pub fn unescape(input: &str) -> String {
+    // Asagi does a general `&#dddd;` escape, but really the only character we need to worry about
+    // is the apostrophe.
+    let input = APOS_ENTITY.replace_all(input, "'");
+    let input = GT_ENTITY.replace_all(&input, ">");
+    let input = LT_ENTITY.replace_all(&input, "<");
+    let input = QUOT_ENTITY.replace_all(&input, "\"");
+    // It is very important that we replace the ampersand last. This way, we don't turn something
+    // like `&amp;gt;` into `>`
+    let input = AMP_ENTITY.replace_all(&input, "&");
+    input.to_string()
 }
 
 // It's a bit heavy-handed to use an HTML parser to clean a few types of tags. But, it is more
 // versatile and reliable than regular expressions.
+/// Clean comment text by unescaping entities, converting tags to BBCode, and ignoring other tags
 pub fn clean(input: &str) -> io::Result<String> {
     let mut sink = vec![];
 
