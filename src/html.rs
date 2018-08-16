@@ -11,7 +11,7 @@ use std::str;
 use self::FourChanTag::*;
 
 lazy_static! {
-    static ref FORTUNE_COLOR: Regex = Regex::new(r"color:(#[[:xdigit:]]{3,6})").unwrap();
+    static ref FORTUNE_COLOR: Regex = Regex::new(r"color:#([[:xdigit:]]{3}{1,2})").unwrap();
     static ref BANNED_COLOR: Regex = Regex::new(r"color:\s*red").unwrap();
 
     static ref AMP_ENTITY: Regex = Regex::new(r"&amp;").unwrap();
@@ -135,7 +135,7 @@ impl FourChanTag {
 
         if &TagType::Start == tag_type {
             if let Fortune(Some(color)) = self {
-                w.write_all(b" color=\"")?;
+                w.write_all(b" color=\"#")?;
                 w.write_all(color.as_bytes())?;
                 w.write_all(b"\"")?;
             }
