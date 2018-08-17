@@ -13,7 +13,6 @@ use self::FourChanTag::*;
 lazy_static! {
     static ref FORTUNE_COLOR: Regex = Regex::new(r"color:#([[:xdigit:]]{3}{1,2})").unwrap();
     static ref BANNED_COLOR: Regex = Regex::new(r"color:\s*red").unwrap();
-
     static ref AMP_ENTITY: Regex = Regex::new(r"&amp;").unwrap();
     static ref APOS_ENTITY: Regex = Regex::new(r"&#039;").unwrap();
     static ref GT_ENTITY: Regex = Regex::new(r"&gt;").unwrap();
@@ -34,6 +33,9 @@ pub fn unescape(input: &str) -> String {
     // It is very important that we replace the ampersand last. This way, we don't turn something
     // like `&amp;gt;` into `>`
     let input = AMP_ENTITY.replace_all(&input, "&");
+
+    // TODO: If this clone is too inefficient, make this function return Option<String>, and return
+    // None on Cow::Borrowed, and let the caller substitute their original string
     input.to_string()
 }
 
