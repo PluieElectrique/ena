@@ -61,8 +61,7 @@ impl Fetcher {
                     .map(|new| {
                         Utc.datetime_from_str(new.to_str().unwrap(), RFC_1123_FORMAT)
                             .unwrap()
-                    })
-                    .unwrap_or_else(Utc::now);
+                    }).unwrap_or_else(Utc::now);
 
                 match res.status() {
                     StatusCode::NOT_MODIFIED => future::err(FetchError::NotModified),
@@ -77,10 +76,9 @@ impl Fetcher {
                         }
                         future::ok((res, new_modified))
                     }
-                    _ => future::err(FetchError::BadStatus(res.status())),
+                    _ => future::err(res.status().into()),
                 }
-            })
-            .and_then(move |(res, last_modified)| {
+            }).and_then(move |(res, last_modified)| {
                 myself
                     .send(UpdateLastFetched(key, last_modified))
                     .then(|_| res.into_body().concat2().from_err())
@@ -125,10 +123,14 @@ pub enum FetchError {
     #[fail(display = "Resource not modified")]
     NotModified,
 
+    #[fail(display = "Resource not found")]
+    NotFound,
+
     #[fail(display = "API returned empty data")]
     Empty,
 }
 impl_enum_from!(hyper::Error, FetchError, HyperError);
+impl_enum_from!(hyper::StatusCode, FetchError, BadStatus);
 impl_enum_from!(serde_json::Error, FetchError, JsonError);
 
 // We would like to return an ActorFuture from Fetcher, but we can't because ActorFutures can only
@@ -158,13 +160,14 @@ impl Handler<FetchThread> for Fetcher {
             self.client
                 .get(get_uri(&format!("{}/thread/{}.json", msg.0, msg.1)))
                 .from_err()
-                .and_then(|res| match res.status() {
+                .and_then(move |res| match res.status() {
                     StatusCode::OK => future::ok(res),
                     StatusCode::NOT_MODIFIED => {
                         warn!("304 Not Modified on thread fetch. Is last_modified in threads.json being checked?");
                         future::err(FetchError::NotModified)
                     }
-                    _ => future::err(FetchError::BadStatus(res.status())),
+                    StatusCode::NOT_FOUND => future::err(FetchError::NotFound),
+                    _ => future::err(res.status().into()),
                 })
                 .and_then(|res| res.into_body().concat2().from_err())
                 .and_then(move |body| {
