@@ -44,8 +44,14 @@ impl BoardPoller {
     fn update_threads(&mut self, mut curr_threads: Vec<Thread>) {
         use self::ThreadUpdate::*;
         let mut updates = vec![];
+        let max_threads = if Board::f == self.board { 30 } else { 150 };
+        let mut new_threads = false;
 
         let push_removed = {
+            // If there were and are less than the maximum number of threads, any "bumped off"
+            // thread is very likely a deletion.
+            let less_than_max =
+                curr_threads.len() < max_threads && self.threads.len() < max_threads;
             let threshold = self.deleted_page_threshold;
             let last_no = curr_threads[curr_threads.len() - 1].no;
             let last_index = self
@@ -57,7 +63,7 @@ impl BoardPoller {
                 .unwrap_or(0);
 
             move |thread: &Thread, updates: &mut Vec<ThreadUpdate>| {
-                if thread.bump_index < last_index || thread.page <= threshold {
+                if thread.bump_index < last_index || thread.page <= threshold || less_than_max {
                     updates.push(Deleted(thread.no));
                 } else {
                     updates.push(BumpedOff(thread.no));
@@ -107,18 +113,31 @@ impl BoardPoller {
                     }
                     (None, Some(curr)) => {
                         updates.push(New(curr.no));
+                        new_threads = true;
                         curr_thread = curr_iter.next();
                     }
                     (None, None) => break,
                 }
             }
-            debug!(
-                "Updating {} threads from /{}/: {:?}",
-                updates.len(),
-                self.board,
-                updates
-            );
         }
+
+        // If the thread count has decreased but there are no new threads, then any "bumped off"
+        // threads was very likely deleted.
+        if self.threads.len() == max_threads && curr_threads.len() < max_threads && !new_threads {
+            for update in &mut updates {
+                if let BumpedOff(no) = *update {
+                    *update = Deleted(no);
+                }
+            }
+        }
+
+        debug!(
+            "Updating {} threads from /{}/: {:?}",
+            updates.len(),
+            self.board,
+            updates
+        );
+
         for subscriber in &self.subscribers {
             Arbiter::spawn(
                 subscriber
