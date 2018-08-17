@@ -42,19 +42,12 @@ impl BoardPoller {
     }
 
     fn update_threads(&mut self, mut curr_threads: Vec<Thread>) {
-        let mut new_threads = vec![];
-        let mut modified_threads = vec![];
-        let mut bumped_off_threads = vec![];
-        let mut deleted_threads = vec![];
+        use self::ThreadUpdate::*;
+        let mut updates = vec![];
 
         let push_removed = {
             let threshold = self.deleted_page_threshold;
-            let last_no = if curr_threads.is_empty() {
-                // This should never, ever happen, but better safe then sorry, I guess
-                0
-            } else {
-                curr_threads[curr_threads.len() - 1].no
-            };
+            let last_no = curr_threads[curr_threads.len() - 1].no;
             let last_index = self
                 .threads
                 .iter()
@@ -63,13 +56,11 @@ impl BoardPoller {
                 .map(|thread| thread.bump_index)
                 .unwrap_or(0);
 
-            move |thread: &Thread,
-                  bumped_off_threads: &mut Vec<u64>,
-                  deleted_threads: &mut Vec<u64>| {
+            move |thread: &Thread, updates: &mut Vec<ThreadUpdate>| {
                 if thread.bump_index < last_index || thread.page <= threshold {
-                    deleted_threads.push(thread.no);
+                    updates.push(Deleted(thread.no));
                 } else {
-                    bumped_off_threads.push(thread.no);
+                    updates.push(BumpedOff(thread.no));
                 }
             }
         };
@@ -88,11 +79,11 @@ impl BoardPoller {
                 match (prev_thread, curr_thread) {
                     (Some(prev), Some(curr)) => {
                         if prev.no < curr.no {
-                            push_removed(prev, &mut bumped_off_threads, &mut deleted_threads);
+                            push_removed(prev, &mut updates);
                             prev_thread = prev_iter.next();
                         } else if prev.no == curr.no {
                             if prev.last_modified < curr.last_modified {
-                                modified_threads.push(curr.no);
+                                updates.push(Modified(curr.no));
                             } else if prev.last_modified > curr.last_modified {
                                 warn!(
                                     "Got old data for /{}/, skipping rest of threads.json",
@@ -111,26 +102,29 @@ impl BoardPoller {
                         }
                     }
                     (Some(prev), None) => {
-                        push_removed(prev, &mut bumped_off_threads, &mut deleted_threads);
+                        push_removed(prev, &mut updates);
                         prev_thread = prev_iter.next();
                     }
                     (None, Some(curr)) => {
-                        new_threads.push(curr.no);
+                        updates.push(New(curr.no));
                         curr_thread = curr_iter.next();
                     }
                     (None, None) => break,
                 }
             }
-            // Detect the rare case where threads are deleted from the very end of the last page.
-            // These threads couldn't have been bumped off because no new threads took their place.
-            if new_threads.is_empty() && !bumped_off_threads.is_empty() {
-                deleted_threads.append(&mut bumped_off_threads);
-            }
-            println!();
-            println!("New threads: {:?}", new_threads);
-            println!("Modified threads: {:?}", modified_threads);
-            println!("Bumped off threads: {:?}", bumped_off_threads);
-            println!("Deleted threads: {:?}", deleted_threads);
+            debug!(
+                "Updating {} threads from /{}/: {:?}",
+                updates.len(),
+                self.board,
+                updates
+            );
+        }
+        for subscriber in &self.subscribers {
+            Arbiter::spawn(
+                subscriber
+                    .send(BoardUpdate(updates.clone()))
+                    .map_err(|err| error!("{}", err)),
+            );
         }
         self.threads = curr_threads;
     }
@@ -161,8 +155,9 @@ impl BoardPoller {
 }
 
 #[derive(Message)]
-pub struct BoardUpdate(Vec<ThreadUpdate>);
+pub struct BoardUpdate(pub Vec<ThreadUpdate>);
 
+#[derive(Clone, Debug)]
 pub enum ThreadUpdate {
     New(u64),
     Modified(u64),

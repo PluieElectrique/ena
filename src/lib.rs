@@ -1,5 +1,6 @@
 extern crate actix;
 extern crate chrono;
+extern crate chrono_tz;
 #[macro_use]
 extern crate failure;
 extern crate futures;
@@ -11,11 +12,14 @@ extern crate hyper_tls;
 extern crate lazy_static;
 #[macro_use]
 extern crate log;
+#[macro_use]
+extern crate mysql_async as my;
 extern crate regex;
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;
 extern crate serde_json;
+extern crate tokio;
 extern crate toml;
 
 macro_rules! impl_enum_from {
@@ -63,11 +67,6 @@ use std::io::BufReader;
 
 use failure::{Error, ResultExt};
 
-pub const BOARD_REPLACE: &str = "%%BOARD%%";
-pub const CHARSET_REPLACE: &str = "%%CHARSET%%";
-pub const BOARD_SQL: &str = include_str!("sql/boards.sql");
-pub const COMMON_SQL: &str = include_str!("sql/common.sql");
-
 #[derive(Deserialize)]
 pub struct Config {
     pub boards: Vec<four_chan::Board>,
@@ -75,6 +74,7 @@ pub struct Config {
     pub deleted_page_threshold: u8,
     pub database_url: String,
     pub charset: String,
+    pub adjust_timestamps: bool,
 }
 
 #[derive(Debug, Fail)]

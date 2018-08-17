@@ -14,3 +14,8 @@ deleted_page_threshold = 7
 # Database settings
 database_url = "mysql://username:password@localhost/ena"
 charset = "utf8mb4"
+
+
+# Asagi/FoolFuuka compatibility
+# Adjust timestamps to EST/EDT (should be `true` for compatibility)
+adjust_timestamps = true

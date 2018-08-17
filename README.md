@@ -1,6 +1,12 @@
 # Ena
 
-A 4chan scraper
+A 4chan scraper. Currently designed to be (mostly) compatible with Asagi/FoolFuuka.
+
+## Asagi Incompatibilities
+
+* `exif` column is not stored (JSON blob of exif data, unique IPs, `since4pass`, and troll countries)
+* Unknown HTML tags are stripped from the output instead of being ignored
+* Posts are trimmed of whitespace (may cause blankposts to become empty, non-NULL strings)
 
 ## Legal
 

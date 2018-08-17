@@ -2,23 +2,16 @@ extern crate actix;
 #[macro_use]
 extern crate ena;
 extern crate failure;
-extern crate futures;
-extern crate hyper;
-extern crate hyper_tls;
 #[macro_use]
 extern crate log;
 extern crate mysql_async as my;
 extern crate pretty_env_logger;
-extern crate serde_json;
-extern crate tokio;
 
 use std::process;
 
 use actix::prelude::*;
 use ena::actors::*;
 use ena::*;
-use futures::prelude::*;
-use my::prelude::*;
 
 use four_chan::fetcher::Fetcher;
 
@@ -29,40 +22,33 @@ fn main() {
         log_error!(err.as_fail());
         process::exit(1);
     });
-    let board = config.boards[0];
 
     let sys = System::new("ena");
+
     let fetcher = Fetcher::new().start();
-    let thread_updater = ThreadUpdater::new(board, fetcher.clone()).start();
-    BoardPoller::new(
-        board,
-        config.poll_interval,
-        config.deleted_page_threshold,
-        vec![],
-        fetcher.clone(),
-    ).start();
 
-    let pool = my::Pool::new(config.database_url);
-    println!("Showing 5 posts from /{}/", board);
+    let database = Database::new(
+        my::Pool::new(config.database_url),
+        config.adjust_timestamps,
+        &config.boards,
+        &config.charset,
+    ).unwrap_or_else(|err| {
+        error!("Database initialization error: {}", err);
+        process::exit(1);
+    }).start();
 
-    let board_sql = BOARD_SQL
-        .replace(CHARSET_REPLACE, &config.charset)
-        .replace(BOARD_REPLACE, &board.to_string());
-    let future = pool
-        .get_conn()
-        .and_then(|conn| conn.drop_query(board_sql))
-        .and_then(move |conn| conn.query(format!("SELECT title FROM {} LIMIT 5", board)))
-        .and_then(|result| {
-            result.for_each_and_drop(|row| {
-                let (title,): (Option<String>,) = my::from_row(row);
-                println!("{:?}", title);
-            })
-        })
-        .and_then(|conn| conn.disconnect())
-        .and_then(|_| pool.disconnect())
-        .map_err(|err| println!("{}", err));
+    for board in config.boards {
+        let thread_updater = ThreadUpdater::new(board, database.clone(), fetcher.clone()).start();
 
-    tokio::run(future);
+        // TODO: Should BoardPoller be able to handle multiple boards?
+        BoardPoller::new(
+            board,
+            config.poll_interval,
+            config.deleted_page_threshold,
+            vec![thread_updater.recipient()],
+            fetcher.clone(),
+        ).start();
+    }
 
     sys.run();
 }
