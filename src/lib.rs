@@ -86,14 +86,14 @@ pub enum ConfigError {
 }
 
 pub fn parse_config() -> Result<Config, Error> {
-    let file = File::open("config.toml").context("Could not open config.toml")?;
+    let file = File::open("ena.toml").context("Could not open ena.toml")?;
     let mut buf_reader = BufReader::new(file);
     let mut contents = String::new();
     buf_reader
         .read_to_string(&mut contents)
-        .context("Could not read config.toml")?;
+        .context("Could not read ena.toml")?;
 
-    let toml: Config = toml::from_str(&contents).context("Could not parse config.toml")?;
+    let toml: Config = toml::from_str(&contents).context("Could not parse ena.toml")?;
 
     if toml.poll_interval == 0 {
         return Err(ConfigError::ZeroPollInterval.into());
