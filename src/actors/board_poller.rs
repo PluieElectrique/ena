@@ -59,8 +59,7 @@ impl BoardPoller {
                 .iter()
                 .rev()
                 .find(|thread| thread.no == last_no)
-                .map(|thread| thread.bump_index)
-                .unwrap_or(0);
+                .map_or(0, |thread| thread.bump_index);
 
             move |thread: &Thread, updates: &mut Vec<ThreadUpdate>| {
                 if thread.bump_index < last_index || thread.page <= threshold || less_than_max {
