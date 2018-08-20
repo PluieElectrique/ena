@@ -20,6 +20,7 @@ const BOARD_REPLACE: &str = "%%BOARD%%";
 const CHARSET_REPLACE: &str = "%%CHARSET%%";
 const BOARD_SQL: &str = include_str!("../sql/boards.sql");
 const COMMON_SQL: &str = include_str!("../sql/common.sql");
+const TRIGGER_SQL: &str = include_str!("../sql/triggers.sql");
 
 const INSERT_QUERY: &str = "INSERT INTO `%%BOARD%%` (num, subnum, thread_num, op, timestamp,
 timestamp_expired, preview_orig, preview_w, preview_h, media_filename, media_w, media_h, media_size,
@@ -43,16 +44,17 @@ impl Database {
         charset: &str,
     ) -> Result<Self, my::errors::Error> {
         let charset_board_sql = BOARD_SQL.replace(CHARSET_REPLACE, charset);
-        let mut board_sql = String::new();
 
+        let mut init_sql = String::new();
         for board in boards {
-            board_sql.push_str(&charset_board_sql.replace(BOARD_REPLACE, &board.to_string()));
+            init_sql.push_str(&charset_board_sql.replace(BOARD_REPLACE, &board.to_string()));
+            init_sql.push_str(&TRIGGER_SQL.replace(BOARD_REPLACE, &board.to_string()));
         }
 
         let mut runtime = Runtime::new().unwrap();
         runtime.block_on(
             pool.get_conn()
-                .and_then(|conn| conn.drop_query(board_sql))
+                .and_then(|conn| conn.drop_query(init_sql))
                 .and_then(|conn| conn.drop_query(COMMON_SQL))
                 // If we don't disconnect the runtime won't shutdown
                 .and_then(|conn| conn.disconnect()),
