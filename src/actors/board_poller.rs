@@ -19,7 +19,7 @@ impl Actor for BoardPoller {
     type Context = Context<Self>;
 
     fn started(&mut self, ctx: &mut Context<Self>) {
-        self.poll(ctx);
+        self.poll(0, ctx);
     }
 }
 
@@ -147,8 +147,8 @@ impl BoardPoller {
         self.threads = curr_threads;
     }
 
-    fn poll(&self, ctx: &mut Context<Self>) {
-        ctx.run_later(Duration::new(self.interval, 0), |act, ctx| {
+    fn poll(&self, interval: u64, ctx: &mut Context<Self>) {
+        ctx.run_later(Duration::new(interval, 0), |act, ctx| {
             ctx.spawn(
                 act.fetcher
                     .send(FetchThreads(act.board))
@@ -165,7 +165,7 @@ impl BoardPoller {
                                 _ => error!("{}", err),
                             },
                         }
-                        act.poll(ctx);
+                        act.poll(act.interval, ctx);
                     }),
             );
         });
