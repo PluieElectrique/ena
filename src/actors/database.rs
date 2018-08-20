@@ -31,6 +31,17 @@ VALUES (:num, :subnum, :thread_num, :op, :timestamp, :timestamp_expired, :previe
 :deleted, :capcode, :name, :trip, :title, :comment, :sticky, :locked, :poster_hash,
 :poster_country)";
 
+const NEW_MEDIA_QUERY: &str = "SELECT
+    IF(total = 1, media_orig, NULL),
+    preview_orig
+FROM `%%BOARD%%`
+INNER JOIN `%%BOARD%%_images` ON
+    `%%BOARD%%`.media_id = `%%BOARD%%_images`.media_id
+    AND preview_orig in (preview_reply, preview_op)
+WHERE doc_id BETWEEN
+    LAST_INSERT_ID()
+    AND LAST_INSERT_ID() + ROW_COUNT() - 1;";
+
 pub struct Database {
     pool: Pool,
     adjust_timestamps: bool,
@@ -158,14 +169,27 @@ impl Handler<InsertPosts> for Database {
 
             params
         });
-        let query = INSERT_QUERY.replace(BOARD_REPLACE, &msg.0.to_string());
+
+        let insert_query = INSERT_QUERY.replace(BOARD_REPLACE, &msg.0.to_string());
+        let new_media_query = NEW_MEDIA_QUERY.replace(BOARD_REPLACE, &msg.0.to_string());
         Arbiter::spawn(
             self.pool
                 .get_conn()
-                .and_then(|conn| conn.batch_exec(query, params))
+                .and_then(|conn| conn.batch_exec(insert_query, params))
+                .and_then(|conn| conn.query(new_media_query))
+                .and_then(|results| {
+                    results.reduce_and_drop(vec![], |mut files: Vec<String>, row| {
+                        let (media, preview) = my::from_row(row);
+                        if let Some(media) = media {
+                            files.push(media);
+                        }
+                        files.push(preview);
+                        files
+                    })
+                })
                 // We don't disconnect here so that we can reuse the connection next time
-                .map_err(|err| error!("MySQL insert error: {}", err))
-                .map(|_| ()),
+                .map(|(_conn, files)| println!("{:?}", files))
+                .map_err(|err| error!("MySQL insert error: {}", err)),
         );
     }
 }
