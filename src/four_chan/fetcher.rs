@@ -8,14 +8,15 @@ use futures::future;
 use futures::prelude::*;
 use hyper::client::{Client, HttpConnector};
 use hyper::header::{self, HeaderValue};
-use hyper::{self, Body, StatusCode};
+use hyper::{self, Body, StatusCode, Uri};
 use hyper_tls::HttpsConnector;
 use serde_json;
 use tokio_timer::{self, Delay};
 
 use super::*;
 
-const API_PREFIX: &str = "https://a.4cdn.org/";
+const API_URI_PREFIX: &str = "https://a.4cdn.org";
+const IMG_URI_PREFIX: &str = "https://i.4cdn.org";
 const RFC_1123_FORMAT: &str = "%a, %d %b %Y %T GMT";
 
 pub struct Fetcher {
@@ -23,6 +24,10 @@ pub struct Fetcher {
     last_modified: HashMap<FetchKey, DateTime<Utc>>,
     last_request: Instant,
     fetch_delay: Duration,
+}
+
+impl Actor for Fetcher {
+    type Context = Context<Self>;
 }
 
 impl Fetcher {
@@ -44,7 +49,7 @@ impl Fetcher {
 
     fn fetch_with_last_modified<K: Into<FetchKey>>(
         &mut self,
-        uri: hyper::Uri,
+        uri: Uri,
         key: K,
         ctx: &Context<Self>,
     ) -> impl Future<Item = hyper::Chunk, Error = FetchError> {
@@ -107,18 +112,6 @@ enum FetchKey {
 impl_enum_from!(FetchThreads, FetchKey, Threads);
 impl_enum_from!(FetchArchive, FetchKey, Archive);
 
-impl Actor for Fetcher {
-    type Context = Context<Self>;
-}
-
-fn get_uri(path: &str) -> hyper::Uri {
-    let mut uri = String::from(API_PREFIX);
-    uri.push_str(&path);
-    uri.parse().unwrap_or_else(|err| {
-        panic!("Could not parse URI {}: {}", uri, err);
-    })
-}
-
 // TODO: Use the Error/ErrorKind pattern if we need context
 #[derive(Debug, Fail)]
 pub enum FetchError {
@@ -167,13 +160,21 @@ impl Message for FetchThread {
     type Result = Result<Vec<Post>, FetchError>;
 }
 
+impl Into<Uri> for FetchThread {
+    fn into(self) -> Uri {
+        format!("{}/{}/thread/{}.json", API_URI_PREFIX, self.0, self.1)
+            .parse()
+            .unwrap_or_else(|err| {
+                panic!("Could not parse URI from {:?}: {}", self, err);
+            })
+    }
+}
+
 impl Handler<FetchThread> for Fetcher {
     type Result = ResponseFuture<Vec<Post>, FetchError>;
 
     fn handle(&mut self, msg: FetchThread, _ctx: &mut Self::Context) -> Self::Result {
-        let fetch = self
-            .client
-            .get(get_uri(&format!("{}/thread/{}.json", msg.0, msg.1)));
+        let fetch = self.client.get(msg.into());
         Box::new(
             self.get_delay()
                 .from_err()
@@ -200,17 +201,26 @@ impl Handler<FetchThread> for Fetcher {
     }
 }
 
-#[derive(Clone, Copy, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct FetchThreads(pub Board);
 impl Message for FetchThreads {
     type Result = Result<Vec<Thread>, FetchError>;
 }
 
+impl Into<Uri> for FetchThreads {
+    fn into(self) -> Uri {
+        format!("{}/{}/threads.json", API_URI_PREFIX, self.0)
+            .parse()
+            .unwrap_or_else(|err| {
+                panic!("Could not parse URI from {:?}: {}", self, err);
+            })
+    }
+}
+
 impl Handler<FetchThreads> for Fetcher {
     type Result = ResponseFuture<Vec<Thread>, FetchError>;
     fn handle(&mut self, msg: FetchThreads, ctx: &mut Self::Context) -> Self::Result {
-        let fetch =
-            self.fetch_with_last_modified(get_uri(&format!("{}/threads.json", msg.0)), msg, ctx);
+        let fetch = self.fetch_with_last_modified(msg.into(), msg, ctx);
         Box::new(
             self.get_delay()
                 .from_err()
@@ -237,17 +247,26 @@ impl Handler<FetchThreads> for Fetcher {
     }
 }
 
-#[derive(Clone, Copy, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct FetchArchive(pub Board);
 impl Message for FetchArchive {
     type Result = Result<Vec<u64>, FetchError>;
 }
 
+impl Into<Uri> for FetchArchive {
+    fn into(self) -> Uri {
+        format!("{}/{}/archive.json", API_URI_PREFIX, self.0)
+            .parse()
+            .unwrap_or_else(|err| {
+                panic!("Could not parse URI from {:?}: {}", self, err);
+            })
+    }
+}
+
 impl Handler<FetchArchive> for Fetcher {
     type Result = ResponseFuture<Vec<u64>, FetchError>;
     fn handle(&mut self, msg: FetchArchive, ctx: &mut Self::Context) -> Self::Result {
-        let fetch =
-            self.fetch_with_last_modified(get_uri(&format!("{}/archive.json", msg.0)), msg, ctx);
+        let fetch = self.fetch_with_last_modified(msg.into(), msg, ctx);
         Box::new(
             self.get_delay()
                 .from_err()
