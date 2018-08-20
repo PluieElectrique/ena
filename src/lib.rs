@@ -20,6 +20,7 @@ extern crate serde;
 extern crate serde_derive;
 extern crate serde_json;
 extern crate tokio;
+extern crate tokio_timer;
 extern crate toml;
 
 macro_rules! impl_enum_from {
@@ -71,6 +72,7 @@ use failure::{Error, ResultExt};
 pub struct Config {
     pub boards: Vec<four_chan::Board>,
     pub poll_interval: u64,
+    pub fetch_delay: u64,
     pub deleted_page_threshold: u8,
     pub database_url: String,
     pub charset: String,

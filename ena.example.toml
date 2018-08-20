@@ -3,6 +3,8 @@
 boards = [""]
 # Seconds to wait between fetching the threads.json of each board
 poll_interval = 30
+# Milliseconds of delay between simultaneous requests (rate limiting)
+fetch_delay = 1_000
 # In ambiguous situations, if a thread disappears, and was last seen on a page after this one, it is
 # considered to have been bumped off. For example, if the threshold is 7, and a thread disappears
 # from pages 1-7, it was deleted. Otherwise, it was bumped off.

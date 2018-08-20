@@ -8,6 +8,7 @@ extern crate mysql_async as my;
 extern crate pretty_env_logger;
 
 use std::process;
+use std::time::Duration;
 
 use actix::prelude::*;
 use ena::actors::*;
@@ -25,7 +26,7 @@ fn main() {
 
     let sys = System::new("ena");
 
-    let fetcher = Fetcher::new().start();
+    let fetcher = Fetcher::new(Duration::from_millis(config.fetch_delay)).start();
 
     let database = Database::new(
         my::Pool::new(config.database_url),

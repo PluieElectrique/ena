@@ -1,5 +1,6 @@
+use std::cmp;
 use std::collections::HashMap;
-use std::default::Default;
+use std::time::{Duration, Instant};
 
 use actix::prelude::*;
 use chrono::prelude::*;
@@ -10,6 +11,7 @@ use hyper::header::{self, HeaderValue};
 use hyper::{self, Body, StatusCode};
 use hyper_tls::HttpsConnector;
 use serde_json;
+use tokio_timer::{self, Delay};
 
 use super::*;
 
@@ -19,16 +21,25 @@ const RFC_1123_FORMAT: &str = "%a, %d %b %Y %T GMT";
 pub struct Fetcher {
     client: Client<HttpsConnector<HttpConnector>>,
     last_modified: HashMap<FetchKey, DateTime<Utc>>,
+    last_request: Instant,
+    fetch_delay: Duration,
 }
 
 impl Fetcher {
-    pub fn new() -> Self {
+    pub fn new(fetch_delay: Duration) -> Self {
         let https = HttpsConnector::new(2).expect("Could not create HttpsConnector");
         let client = Client::builder().build::<_, Body>(https);
         Self {
             client,
             last_modified: HashMap::new(),
+            last_request: Instant::now() - fetch_delay,
+            fetch_delay,
         }
+    }
+
+    fn get_delay(&mut self) -> Delay {
+        self.last_request = cmp::max(Instant::now(), self.last_request + self.fetch_delay);
+        Delay::new(self.last_request)
     }
 
     fn fetch_with_last_modified<K: Into<FetchKey>>(
@@ -128,10 +139,14 @@ pub enum FetchError {
 
     #[fail(display = "API returned empty data")]
     Empty,
+
+    #[fail(display = "API returned empty data")]
+    TimerError(#[cause] tokio_timer::Error),
 }
 impl_enum_from!(hyper::Error, FetchError, HyperError);
 impl_enum_from!(hyper::StatusCode, FetchError, BadStatus);
 impl_enum_from!(serde_json::Error, FetchError, JsonError);
+impl_enum_from!(tokio_timer::Error, FetchError, TimerError);
 
 // We would like to return an ActorFuture from Fetcher, but we can't because ActorFutures can only
 // run on their own contexts. So, Fetcher must send a message to itself to update `last_modified`.
@@ -156,10 +171,13 @@ impl Handler<FetchThread> for Fetcher {
     type Result = ResponseFuture<Vec<Post>, FetchError>;
 
     fn handle(&mut self, msg: FetchThread, _ctx: &mut Self::Context) -> Self::Result {
+        let fetch = self
+            .client
+            .get(get_uri(&format!("{}/thread/{}.json", msg.0, msg.1)));
         Box::new(
-            self.client
-                .get(get_uri(&format!("{}/thread/{}.json", msg.0, msg.1)))
+            self.get_delay()
                 .from_err()
+                .and_then(|_| fetch.from_err())
                 .and_then(move |res| match res.status() {
                     StatusCode::OK => future::ok(res),
                     StatusCode::NOT_MODIFIED => {
@@ -191,8 +209,12 @@ impl Message for FetchThreads {
 impl Handler<FetchThreads> for Fetcher {
     type Result = ResponseFuture<Vec<Thread>, FetchError>;
     fn handle(&mut self, msg: FetchThreads, ctx: &mut Self::Context) -> Self::Result {
+        let fetch =
+            self.fetch_with_last_modified(get_uri(&format!("{}/threads.json", msg.0)), msg, ctx);
         Box::new(
-            self.fetch_with_last_modified(get_uri(&format!("{}/threads.json", msg.0)), msg, ctx)
+            self.get_delay()
+                .from_err()
+                .and_then(|_| fetch)
                 .and_then(move |body| {
                     let threads: Vec<ThreadPage> = serde_json::from_slice(&body)?;
                     let mut threads = threads.into_iter().fold(vec![], |mut acc, mut page| {
@@ -224,8 +246,12 @@ impl Message for FetchArchive {
 impl Handler<FetchArchive> for Fetcher {
     type Result = ResponseFuture<Vec<u64>, FetchError>;
     fn handle(&mut self, msg: FetchArchive, ctx: &mut Self::Context) -> Self::Result {
+        let fetch =
+            self.fetch_with_last_modified(get_uri(&format!("{}/archive.json", msg.0)), msg, ctx);
         Box::new(
-            self.fetch_with_last_modified(get_uri(&format!("{}/archive.json", msg.0)), msg, ctx)
+            self.get_delay()
+                .from_err()
+                .and_then(|_| fetch)
                 .and_then(move |body| {
                     let archive: Vec<u64> = serde_json::from_slice(&body)?;
                     if archive.is_empty() {
