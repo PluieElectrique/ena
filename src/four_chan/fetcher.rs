@@ -11,7 +11,8 @@ use hyper::header::{self, HeaderValue};
 use hyper::{self, Body, StatusCode, Uri};
 use hyper_tls::HttpsConnector;
 use serde_json;
-use tokio_timer::{self, Delay};
+use tokio;
+use tokio::timer::Delay;
 
 use super::*;
 
@@ -134,12 +135,12 @@ pub enum FetchError {
     Empty,
 
     #[fail(display = "API returned empty data")]
-    TimerError(#[cause] tokio_timer::Error),
+    TimerError(#[cause] tokio::timer::Error),
 }
 impl_enum_from!(hyper::Error, FetchError, HyperError);
 impl_enum_from!(hyper::StatusCode, FetchError, BadStatus);
 impl_enum_from!(serde_json::Error, FetchError, JsonError);
-impl_enum_from!(tokio_timer::Error, FetchError, TimerError);
+impl_enum_from!(tokio::timer::Error, FetchError, TimerError);
 
 // We would like to return an ActorFuture from Fetcher, but we can't because ActorFutures can only
 // run on their own contexts. So, Fetcher must send a message to itself to update `last_modified`.
