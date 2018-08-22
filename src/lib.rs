@@ -107,6 +107,9 @@ pub fn parse_config() -> Result<Config, Error> {
     if toml.deleted_page_threshold > 10 {
         return Err(ConfigError::OutOfRangeThreshold.into());
     }
+    if toml.fetch_delay < 1_000 {
+        warn!("A `fetch_delay` of less than 1s can lead to rate limiting");
+    }
 
     Ok(toml)
 }
