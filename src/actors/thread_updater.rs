@@ -1,11 +1,12 @@
 use std::collections::HashMap;
 
 use actix::prelude::*;
+use futures::future;
 use futures::prelude::*;
 
 use super::board_poller::{BoardUpdate, ThreadUpdate};
 use super::database::{Database, InsertPosts};
-use four_chan::fetcher::{FetchError, FetchThread, Fetcher};
+use four_chan::fetcher::*;
 use four_chan::{self, Board};
 
 pub struct ThreadUpdater {
@@ -13,6 +14,10 @@ pub struct ThreadUpdater {
     threads: HashMap<u64, Thread>,
     fetcher: Addr<Fetcher>,
     database: Addr<Database>,
+}
+
+impl Actor for ThreadUpdater {
+    type Context = Context<Self>;
 }
 
 impl ThreadUpdater {
@@ -25,7 +30,6 @@ impl ThreadUpdater {
         }
     }
 
-    // TODO: Insert media
     fn handle_new(&mut self, no: u64, ctx: &mut <Self as Actor>::Context) {
         let future = self
             .fetcher
@@ -38,11 +42,21 @@ impl ThreadUpdater {
                     Ok(thread) => {
                         act.threads.insert(no, Thread::from_thread(&thread));
 
+                        let board = act.board;
+                        let fetcher = act.fetcher.clone();
                         Arbiter::spawn(
                             // TODO: retry on error?
                             act.database
                                 .send(InsertPosts(act.board, thread))
-                                .map_err(|err| log_error!(&err)),
+                                .map_err(|err| log_error!(&err))
+                                .and_then(|res| res.map_err(|err| error!("{}", err)))
+                                .and_then(move |filenames| {
+                                    future::join_all(filenames.into_iter().map(move |filename| {
+                                        fetcher.send(FetchMedia(board, filename))
+                                    }))
+                                    .map(|_| ())
+                                    .map_err(|err| error!("{}", err))
+                                })
                         );
                     }
                     Err(err) => match err {
@@ -58,10 +72,6 @@ impl ThreadUpdater {
             });
         ctx.spawn(future);
     }
-}
-
-impl Actor for ThreadUpdater {
-    type Context = Context<Self>;
 }
 
 impl Handler<BoardUpdate> for ThreadUpdater {

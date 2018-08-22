@@ -13,9 +13,10 @@ fetch_delay = 1_000
 deleted_page_threshold = 7
 
 
-# Database settings
+# Database/media settings
 database_url = "mysql://username:password@localhost/ena"
 charset = "utf8mb4"
+media_dir = "media"
 
 
 # Asagi/FoolFuuka compatibility

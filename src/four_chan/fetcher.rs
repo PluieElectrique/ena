@@ -1,5 +1,7 @@
+use std;
 use std::cmp;
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use actix::prelude::*;
@@ -12,7 +14,10 @@ use hyper::{self, Body, StatusCode, Uri};
 use hyper_tls::HttpsConnector;
 use serde_json;
 use tokio;
+use tokio::io;
+use tokio::runtime::Runtime;
 use tokio::timer::Delay;
+use tokio_fs;
 
 use super::*;
 
@@ -25,6 +30,10 @@ pub struct Fetcher {
     last_modified: HashMap<FetchKey, DateTime<Utc>>,
     last_request: Instant,
     fetch_delay: Duration,
+    media_path: PathBuf,
+    // Fetcher must use its own runtime because tokio-fs functions can't use the current_thread
+    // runtime that Actix provides
+    runtime: Runtime,
 }
 
 impl Actor for Fetcher {
@@ -32,7 +41,7 @@ impl Actor for Fetcher {
 }
 
 impl Fetcher {
-    pub fn new(fetch_delay: Duration) -> Self {
+    pub fn new(fetch_delay: Duration, media_path: PathBuf) -> Self {
         let https = HttpsConnector::new(2).expect("Could not create HttpsConnector");
         let client = Client::builder().build::<_, Body>(https);
         Self {
@@ -40,6 +49,8 @@ impl Fetcher {
             last_modified: HashMap::new(),
             last_request: Instant::now() - fetch_delay,
             fetch_delay,
+            media_path,
+            runtime: Runtime::new().unwrap(),
         }
     }
 
@@ -136,11 +147,15 @@ pub enum FetchError {
 
     #[fail(display = "API returned empty data")]
     TimerError(#[cause] tokio::timer::Error),
+
+    #[fail(display = "IO error: {}", _0)]
+    IoError(#[cause] std::io::Error),
 }
 impl_enum_from!(hyper::Error, FetchError, HyperError);
 impl_enum_from!(hyper::StatusCode, FetchError, BadStatus);
 impl_enum_from!(serde_json::Error, FetchError, JsonError);
 impl_enum_from!(tokio::timer::Error, FetchError, TimerError);
+impl_enum_from!(std::io::Error, FetchError, IoError);
 
 // We would like to return an ActorFuture from Fetcher, but we can't because ActorFutures can only
 // run on their own contexts. So, Fetcher must send a message to itself to update `last_modified`.
@@ -281,5 +296,67 @@ impl Handler<FetchArchive> for Fetcher {
                     }
                 }),
         )
+    }
+}
+
+#[derive(Debug, Message)]
+pub struct FetchMedia(pub Board, pub String);
+
+impl Into<Uri> for FetchMedia {
+    fn into(self) -> Uri {
+        format!("{}/{}/{}", IMG_URI_PREFIX, self.0, self.1)
+            .parse()
+            .unwrap_or_else(|err| {
+                panic!("Could not parse URI from {:?}: {}", self, err);
+            })
+    }
+}
+
+impl Handler<FetchMedia> for Fetcher {
+    type Result = ();
+    fn handle(&mut self, msg: FetchMedia, _ctx: &mut Self::Context) {
+        // TODO: Is it inefficient to recreate the directories each time?
+        let mut temp_path = self.media_path.clone();
+        temp_path.push(msg.0.to_string());
+        temp_path.push("tmp");
+        std::fs::create_dir_all(&temp_path).unwrap();
+        temp_path.push(msg.1.to_string());
+
+        let mut real_path = self.media_path.clone();
+        real_path.push(msg.0.to_string());
+        real_path.push(if msg.1.ends_with("s.jpg") {
+            "thumb"
+        } else {
+            "image"
+        });
+        real_path.push(&msg.1[0..4]);
+        real_path.push(&msg.1[4..6]);
+        std::fs::create_dir_all(&real_path).unwrap();
+        real_path.push(msg.1.to_string());
+
+        let fetch = self.client.get(msg.into());
+        let future = self
+            .get_delay()
+            .from_err()
+            .and_then(|_| fetch.from_err())
+            .and_then(move |res| match res.status() {
+                StatusCode::OK => future::ok(res),
+                StatusCode::NOT_FOUND => future::err(FetchError::NotFound),
+                _ => future::err(res.status().into()),
+            }).join(tokio::fs::File::create(temp_path.clone()).from_err())
+            .and_then(|(res, file)| {
+                res.into_body().from_err().fold(file, |file, chunk| {
+                    io::write_all(file, chunk)
+                        .from_err::<FetchError>()
+                        .map(|(file, _)| file)
+                })
+            }).and_then(|_| {
+                debug!("Writing {:?}", real_path);
+                tokio_fs::rename(temp_path, real_path).from_err()
+            })
+            // TODO: Retry request
+            .map_err(|err| log_error!(&err));
+
+        self.runtime.spawn(future);
     }
 }

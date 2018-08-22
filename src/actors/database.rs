@@ -83,13 +83,15 @@ impl Actor for Database {
     type Context = Context<Self>;
 }
 
-#[derive(Message)]
 pub struct InsertPosts(pub Board, pub Vec<Post>);
+impl Message for InsertPosts {
+    type Result = Result<Vec<String>, my::errors::Error>;
+}
 
 impl Handler<InsertPosts> for Database {
-    type Result = ();
+    type Result = ResponseFuture<Vec<String>, my::errors::Error>;
 
-    fn handle(&mut self, msg: InsertPosts, _ctx: &mut Self::Context) {
+    fn handle(&mut self, msg: InsertPosts, _ctx: &mut Self::Context) -> Self::Result {
         debug!("Inserting /{}/ No. {}", msg.0, msg.1[0].no);
         let adjust_timestamps = self.adjust_timestamps;
         let params = msg.1.into_iter().map(move |post| {
@@ -172,7 +174,7 @@ impl Handler<InsertPosts> for Database {
 
         let insert_query = INSERT_QUERY.replace(BOARD_REPLACE, &msg.0.to_string());
         let new_media_query = NEW_MEDIA_QUERY.replace(BOARD_REPLACE, &msg.0.to_string());
-        Arbiter::spawn(
+        Box::new(
             self.pool
                 .get_conn()
                 .and_then(|conn| conn.batch_exec(insert_query, params))
@@ -188,8 +190,7 @@ impl Handler<InsertPosts> for Database {
                     })
                 })
                 // We don't disconnect here so that we can reuse the connection next time
-                .map(|(_conn, files)| println!("{:?}", files))
-                .map_err(|err| error!("MySQL insert error: {}", err)),
-        );
+                .map(|(_conn, files)| files),
+        )
     }
 }

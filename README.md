@@ -4,9 +4,10 @@ A 4chan scraper. Currently designed to be (mostly) compatible with Asagi/FoolFuu
 
 ## Asagi Incompatibilities
 
-* `exif` column is not stored (JSON blob of exif data, unique IPs, `since4pass`, and troll countries)
+* The `exif` column is not stored (JSON blob of exif data, unique IPs, `since4pass`, and troll countries)
 * Unknown HTML tags are stripped from the output instead of being ignored
 * Posts are trimmed of whitespace (may cause blankposts to become empty, non-NULL strings)
+* The old media/thumbs directory structure is not supported
 
 ## Legal
 

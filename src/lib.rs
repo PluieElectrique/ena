@@ -20,6 +20,7 @@ extern crate serde;
 extern crate serde_derive;
 extern crate serde_json;
 extern crate tokio;
+extern crate tokio_fs;
 extern crate toml;
 
 macro_rules! impl_enum_from {
@@ -64,6 +65,7 @@ pub mod html;
 use std::fs::File;
 use std::io::prelude::*;
 use std::io::BufReader;
+use std::path::PathBuf;
 
 use failure::{Error, ResultExt};
 
@@ -75,6 +77,7 @@ pub struct Config {
     pub deleted_page_threshold: u8,
     pub database_url: String,
     pub charset: String,
+    pub media_path: PathBuf,
     pub adjust_timestamps: bool,
 }
 
