@@ -127,13 +127,13 @@ impl_enum_from!(FetchArchive, FetchKey, Archive);
 // TODO: Use the Error/ErrorKind pattern if we need context
 #[derive(Debug, Fail)]
 pub enum FetchError {
-    #[fail(display = "Hyper error: {}", _0)]
+    #[fail(display = "Hyper error")]
     HyperError(#[cause] hyper::Error),
 
     #[fail(display = "Bad status: {}", _0)]
     BadStatus(hyper::StatusCode),
 
-    #[fail(display = "JSON error: {}", _0)]
+    #[fail(display = "JSON error")]
     JsonError(#[cause] serde_json::Error),
 
     #[fail(display = "Resource not modified")]
@@ -145,10 +145,10 @@ pub enum FetchError {
     #[fail(display = "API returned empty data")]
     Empty,
 
-    #[fail(display = "API returned empty data")]
+    #[fail(display = "Timer error")]
     TimerError(#[cause] tokio::timer::Error),
 
-    #[fail(display = "IO error: {}", _0)]
+    #[fail(display = "IO error")]
     IoError(#[cause] std::io::Error),
 }
 impl_enum_from!(hyper::Error, FetchError, HyperError);
