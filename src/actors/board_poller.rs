@@ -131,7 +131,7 @@ impl BoardPoller {
         }
 
         debug!(
-            "Updating {} threads from /{}/: {:?}",
+            "Updating {} thread(s) from /{}/: {:?}",
             updates.len(),
             self.board,
             updates
