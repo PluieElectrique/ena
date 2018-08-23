@@ -10,6 +10,7 @@ A 4chan scraper. Currently designed to be (mostly) compatible with Asagi/FoolFuu
 * The old media/thumbs directory structure is not supported
 * A different bumped off/deleted algorithm
 * The `timestamp_expired` for a deleted thread is taken from the `Last-Modified` header of the `threads.json` poll, and not the time at which the deleted thread was processed
+* PostgreSQL is currently not supported.
 
 ## Legal
 
