@@ -44,7 +44,7 @@ impl BoardPoller {
     fn update_threads(&mut self, mut curr_threads: Vec<Thread>) {
         use self::ThreadUpdate::*;
         let mut updates = vec![];
-        let max_threads = if Board::f == self.board { 30 } else { 150 };
+        let max_threads = self.board.max_threads() as usize;
         let mut new_threads = false;
 
         let push_removed = {

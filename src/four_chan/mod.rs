@@ -121,6 +121,15 @@ impl fmt::Display for Board {
     }
 }
 
+impl Board {
+    pub fn max_threads(&self) -> u8 {
+        match self {
+            Board::f => 30,
+            _ => 150,
+        }
+    }
+}
+
 #[allow(non_camel_case_types)]
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq)]
 pub enum Board {
