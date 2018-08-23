@@ -48,8 +48,8 @@ impl BoardPoller {
         let mut new_threads = false;
 
         let push_removed = {
-            // If there were and are less than the maximum number of threads, any "bumped off"
-            // thread is very likely a deletion.
+            // If there were and now are less than the maximum number of threads, any removed thread
+            // is likely a deletion.
             let less_than_max =
                 curr_threads.len() < max_threads && self.threads.len() < max_threads;
             let threshold = self.deleted_page_threshold;
@@ -59,10 +59,17 @@ impl BoardPoller {
                 .iter()
                 .rev()
                 .find(|thread| thread.no == last_no)
-                .map_or(0, |thread| thread.bump_index);
+                .map(|thread| thread.bump_index);
 
             move |thread: &Thread, updates: &mut Vec<ThreadUpdate>| {
-                if thread.bump_index < last_index || thread.page <= threshold || less_than_max {
+                if last_index.is_none() {
+                    // If all of the threads have changed, then we probably loaded the thread list
+                    // from the database, and can't assume that any of the old threads were deleted
+                    updates.push(BumpedOff(thread.no));
+                } else if less_than_max
+                    || thread.bump_index < last_index.unwrap()
+                    || thread.page <= threshold
+                {
                     updates.push(Deleted(thread.no));
                 } else {
                     updates.push(BumpedOff(thread.no));
@@ -121,7 +128,7 @@ impl BoardPoller {
         }
 
         // If the thread count has decreased but there are no new threads, then any "bumped off"
-        // threads was very likely deleted.
+        // threads was likely deleted.
         if self.threads.len() == max_threads && curr_threads.len() < max_threads && !new_threads {
             for update in &mut updates {
                 if let BumpedOff(no) = *update {
