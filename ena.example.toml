@@ -1,14 +1,19 @@
-# Scraping settings
+## Scraping settings
+
 # List of boards to scrape (note: 3 must be written as "_3")
 boards = [""]
+
 # Seconds to wait between fetching the threads.json of each board
 poll_interval = 30
+
 # Milliseconds of delay between simultaneous requests
 fetch_delay = 1_000
+
 # On boards that have archiving, fetch a thread again after it has been archived. This allows for
 # more accurate archive times (how much more depends on poll_interval) and catches sage posts and
 # other changes which would have otherwise been missed, at the cost of an extra request.
 refetch_archived_threads = false
+
 # In ambiguous situations, if a thread disappears, and was last seen on a page after this one, it is
 # considered to have been bumped off. For example, if the threshold is 7, and a thread disappears
 # from pages 1-7, it was deleted. Otherwise, it was bumped off.
@@ -17,15 +22,17 @@ refetch_archived_threads = false
 deleted_page_threshold = 7
 
 
-# Database/media settings
+## Database/media settings
 database_url = "mysql://username:password@localhost/ena"
 charset = "utf8mb4"
 media_dir = "media"
 
 
-# Asagi/FoolFuuka compatibility
+## Asagi/FoolFuuka compatibility
+
 # Adjust timestamps to EST/EDT (should be `true` for compatibility)
 adjust_timestamps = true
+
 # Add archive times to bumped-off threads on boards that don't have archiving. (should be `false`
 # for compatibility)
 always_add_archive_times = false
