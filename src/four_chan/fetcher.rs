@@ -73,7 +73,7 @@ impl Fetcher {
         uri: Uri,
         key: K,
         ctx: &Context<Self>,
-    ) -> impl Future<Item = hyper::Chunk, Error = FetchError> {
+    ) -> impl Future<Item = (hyper::Chunk, DateTime<Utc>), Error = FetchError> {
         let mut request = hyper::Request::get(uri).body(Body::default()).unwrap();
         let key = key.into();
         let myself = ctx.address();
@@ -119,6 +119,7 @@ impl Fetcher {
                 myself
                     .send(UpdateLastFetched(key, last_modified))
                     .then(|_| res.into_body().concat2().from_err())
+                    .map(move |body| (body, last_modified))
             })
     }
 }
@@ -229,7 +230,7 @@ impl Handler<FetchThread> for Fetcher {
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct FetchThreads(pub Board);
 impl Message for FetchThreads {
-    type Result = Result<Vec<Thread>, FetchError>;
+    type Result = Result<(Vec<Thread>, DateTime<Utc>), FetchError>;
 }
 
 impl Into<Uri> for FetchThreads {
@@ -243,32 +244,29 @@ impl Into<Uri> for FetchThreads {
 }
 
 impl Handler<FetchThreads> for Fetcher {
-    type Result = ResponseFuture<Vec<Thread>, FetchError>;
+    type Result = ResponseFuture<(Vec<Thread>, DateTime<Utc>), FetchError>;
     fn handle(&mut self, msg: FetchThreads, ctx: &mut Self::Context) -> Self::Result {
         let fetch = self.fetch_with_last_modified(msg.into(), msg, ctx);
-        Box::new(
-            self.get_delay()
-                .from_err()
-                .and_then(|_| fetch)
-                .and_then(move |body| {
-                    let threads: Vec<ThreadPage> = serde_json::from_slice(&body)?;
-                    let mut threads = threads.into_iter().fold(vec![], |mut acc, mut page| {
-                        for thread in &mut page.threads {
-                            thread.page = page.page;
-                        }
-                        acc.append(&mut page.threads);
-                        acc
-                    });
-                    for (i, thread) in threads.iter_mut().enumerate() {
-                        thread.bump_index = i as u8;
+        Box::new(self.get_delay().from_err().and_then(|_| fetch).and_then(
+            move |(body, last_modified)| {
+                let threads: Vec<ThreadPage> = serde_json::from_slice(&body)?;
+                let mut threads = threads.into_iter().fold(vec![], |mut acc, mut page| {
+                    for thread in &mut page.threads {
+                        thread.page = page.page;
                     }
-                    if threads.is_empty() {
-                        Err(FetchError::Empty)
-                    } else {
-                        Ok(threads)
-                    }
-                }),
-        )
+                    acc.append(&mut page.threads);
+                    acc
+                });
+                for (i, thread) in threads.iter_mut().enumerate() {
+                    thread.bump_index = i as u8;
+                }
+                if threads.is_empty() {
+                    Err(FetchError::Empty)
+                } else {
+                    Ok((threads, last_modified))
+                }
+            },
+        ))
     }
 }
 
@@ -292,19 +290,16 @@ impl Handler<FetchArchive> for Fetcher {
     type Result = ResponseFuture<Vec<u64>, FetchError>;
     fn handle(&mut self, msg: FetchArchive, ctx: &mut Self::Context) -> Self::Result {
         let fetch = self.fetch_with_last_modified(msg.into(), msg, ctx);
-        Box::new(
-            self.get_delay()
-                .from_err()
-                .and_then(|_| fetch)
-                .and_then(move |body| {
-                    let archive: Vec<u64> = serde_json::from_slice(&body)?;
-                    if archive.is_empty() {
-                        Err(FetchError::Empty)
-                    } else {
-                        Ok(archive)
-                    }
-                }),
-        )
+        Box::new(self.get_delay().from_err().and_then(|_| fetch).and_then(
+            move |(body, _last_modified)| {
+                let archive: Vec<u64> = serde_json::from_slice(&body)?;
+                if archive.is_empty() {
+                    Err(FetchError::Empty)
+                } else {
+                    Ok(archive)
+                }
+            },
+        ))
     }
 }
 

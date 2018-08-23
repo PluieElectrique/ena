@@ -1,6 +1,7 @@
 use std::time::Duration;
 
 use actix::prelude::*;
+use chrono::prelude::*;
 use futures::prelude::*;
 
 use four_chan::fetcher::{FetchError, FetchThreads, Fetcher};
@@ -41,7 +42,7 @@ impl BoardPoller {
         }
     }
 
-    fn update_threads(&mut self, mut curr_threads: Vec<Thread>) {
+    fn update_threads(&mut self, mut curr_threads: Vec<Thread>, last_modified: DateTime<Utc>) {
         use self::ThreadUpdate::*;
         let mut updates = vec![];
         let max_threads = self.board.max_threads() as usize;
@@ -147,7 +148,7 @@ impl BoardPoller {
         for subscriber in &self.subscribers {
             Arbiter::spawn(
                 subscriber
-                    .send(BoardUpdate(updates.clone()))
+                    .send(BoardUpdate(updates.clone(), last_modified))
                     .map_err(|err| error!("{}", err)),
             );
         }
@@ -161,10 +162,10 @@ impl BoardPoller {
                     .send(FetchThreads(act.board))
                     .map_err(|err| log_error!(&err))
                     .into_actor(act)
-                    .map(|threads, act, ctx| {
-                        match threads {
-                            Ok(threads) => {
-                                act.update_threads(threads);
+                    .map(|res, act, ctx| {
+                        match res {
+                            Ok((threads, last_modified)) => {
+                                act.update_threads(threads, last_modified);
                                 debug!("Fetched and updated threads from /{}/", act.board);
                             }
                             Err(err) => match err {
@@ -180,7 +181,7 @@ impl BoardPoller {
 }
 
 #[derive(Message)]
-pub struct BoardUpdate(pub Vec<ThreadUpdate>);
+pub struct BoardUpdate(pub Vec<ThreadUpdate>, pub DateTime<Utc>);
 
 #[derive(Clone, Debug)]
 pub enum ThreadUpdate {
