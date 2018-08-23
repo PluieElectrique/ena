@@ -129,6 +129,13 @@ impl Board {
             _ => 150,
         }
     }
+
+    pub fn is_archived(&self) -> bool {
+        match self {
+            Board::b | Board::bant | Board::f | Board::trash => false,
+            _ => true,
+        }
+    }
 }
 
 #[allow(non_camel_case_types)]
