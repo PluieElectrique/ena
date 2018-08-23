@@ -24,12 +24,11 @@ const TRIGGER_SQL: &str = include_str!("../sql/triggers.sql");
 
 const INSERT_QUERY: &str = "INSERT INTO `%%BOARD%%` (num, subnum, thread_num, op, timestamp,
 timestamp_expired, preview_orig, preview_w, preview_h, media_filename, media_w, media_h, media_size,
-media_hash, media_orig, spoiler, deleted, capcode, name, trip, title, comment, sticky, locked,
-poster_hash, poster_country)
+media_hash, media_orig, spoiler, capcode, name, trip, title, comment, sticky, locked, poster_hash,
+poster_country)
 VALUES (:num, :subnum, :thread_num, :op, :timestamp, :timestamp_expired, :preview_orig, :preview_w,
 :preview_h, :media_filename, :media_w, :media_h, :media_size, :media_hash, :media_orig, :spoiler,
-:deleted, :capcode, :name, :trip, :title, :comment, :sticky, :locked, :poster_hash,
-:poster_country)";
+:capcode, :name, :trip, :title, :comment, :sticky, :locked, :poster_hash, :poster_country)";
 
 const NEW_MEDIA_QUERY: &str = "SELECT
     IF(total = 1, media_orig, NULL),
@@ -150,7 +149,6 @@ impl Handler<InsertNewThread> for Database {
                     "preview_w" => image.thumbnail_width,
                     "preview_h" => image.thumbnail_height,
                     "spoiler" => image.spoiler,
-                    "deleted" => image.file_deleted,
                 };
             } else {
                 image_params = params! {
@@ -164,7 +162,6 @@ impl Handler<InsertNewThread> for Database {
                     "preview_w" => 0,
                     "preview_h" => 0,
                     "spoiler" => false,
-                    "deleted" => false,
                 };
             }
             params.append(&mut image_params);

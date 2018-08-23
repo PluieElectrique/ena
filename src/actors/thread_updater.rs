@@ -113,7 +113,7 @@ impl Thread {
             .map(|post| PostMetadata {
                 no: post.no,
                 comment_len: post.comment.as_ref().map(|c| c.len()).unwrap_or(0),
-                file_deleted: post.image.as_ref().map(|i| i.file_deleted).unwrap_or(false),
+                //file_deleted: post.image.as_ref().map(|i| i.file_deleted).unwrap_or(false),
             }).collect();
 
         Self {
@@ -130,5 +130,6 @@ struct PostMetadata {
     /// Length of a comment before HTML cleaning. Used to detect if "(USER WAS BANNED FOR THIS
     /// POST)" was added to the comment.
     comment_len: usize,
-    file_deleted: bool,
+    // The Asagi/FoolFuuka schema currently doesn't track this
+    //file_deleted: bool,
 }
