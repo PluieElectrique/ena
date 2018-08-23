@@ -5,7 +5,7 @@ use futures::future;
 use futures::prelude::*;
 
 use super::board_poller::{BoardUpdate, ThreadUpdate};
-use super::database::{Database, InsertNewThread};
+use super::database::*;
 use four_chan::fetcher::*;
 use four_chan::{self, Board};
 
@@ -92,8 +92,23 @@ impl Handler<BoardUpdate> for ThreadUpdater {
                 BumpedOff(_no) => {
                     // TODO: mark as removed
                 }
-                Deleted(_no) => {
-                    // TODO: mark as deleted
+                Deleted(no) => {
+                    self.threads.remove(&no);
+
+                    let board = self.board;
+                    Arbiter::spawn(
+                        self.database
+                            .send(MarkPostsDeleted(self.board, vec![no], msg.1))
+                            .map_err(|err| error!("{}", err))
+                            .and_then(move |res| {
+                                res.map_err(|err| {
+                                    error!(
+                                        "Failed to mark /{}/ No. {} as deleted: {}",
+                                        board, no, err
+                                    )
+                                })
+                            }),
+                    );
                 }
             }
         }

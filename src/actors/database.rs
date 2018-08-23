@@ -41,6 +41,9 @@ WHERE doc_id BETWEEN
     LAST_INSERT_ID()
     AND LAST_INSERT_ID() + ROW_COUNT() - 1;";
 
+const MARK_DELETED_QUERY: &str = "UPDATE `%%BOARD%%`
+SET deleted = TRUE, timestamp_expired = :timestamp_expired WHERE num = :num AND subnum = 0";
+
 pub struct Database {
     pool: Pool,
     adjust_timestamps: bool,
@@ -185,9 +188,41 @@ impl Handler<InsertNewThread> for Database {
                         files.push(preview);
                         files
                     })
-                })
-                // We don't disconnect here so that we can reuse the connection next time
-                .map(|(_conn, files)| files),
+                }).map(|(_conn, files)| files),
+        )
+    }
+}
+
+pub struct MarkPostsDeleted(pub Board, pub Vec<u64>, pub DateTime<Utc>);
+impl Message for MarkPostsDeleted {
+    type Result = Result<(), my::errors::Error>;
+}
+
+impl Handler<MarkPostsDeleted> for Database {
+    type Result = ResponseFuture<(), my::errors::Error>;
+
+    fn handle(&mut self, msg: MarkPostsDeleted, _ctx: &mut Self::Context) -> Self::Result {
+        let timestamp_expired = if self.adjust_timestamps {
+            msg.2
+                .with_timezone(&America::New_York)
+                .naive_local()
+                .timestamp() as u64
+        } else {
+            msg.2.timestamp() as u64
+        };
+
+        let params = msg.1.into_iter().map(move |no| {
+            params! {
+                "num" => no,
+                timestamp_expired,
+            }
+        });
+        let mark_deleted_query = MARK_DELETED_QUERY.replace(BOARD_REPLACE, &msg.0.to_string());
+        Box::new(
+            self.pool
+                .get_conn()
+                .and_then(|conn| conn.batch_exec(mark_deleted_query, params))
+                .map(|_conn| ()),
         )
     }
 }
