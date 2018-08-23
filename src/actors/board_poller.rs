@@ -54,7 +54,7 @@ impl BoardPoller {
                 curr_threads.len() < max_threads && self.threads.len() < max_threads;
             let threshold = self.deleted_page_threshold;
             let last_no = curr_threads[curr_threads.len() - 1].no;
-            let last_index = self
+            let anchor_index = self
                 .threads
                 .iter()
                 .rev()
@@ -62,12 +62,12 @@ impl BoardPoller {
                 .map(|thread| thread.bump_index);
 
             move |thread: &Thread, updates: &mut Vec<ThreadUpdate>| {
-                if last_index.is_none() {
+                if anchor_index.is_none() {
                     // If all of the threads have changed, then we probably loaded the thread list
                     // from the database, and can't assume that any of the old threads were deleted
                     updates.push(BumpedOff(thread.no));
                 } else if less_than_max
-                    || thread.bump_index < last_index.unwrap()
+                    || thread.bump_index < anchor_index.unwrap()
                     || thread.page <= threshold
                 {
                     updates.push(Deleted(thread.no));
