@@ -5,7 +5,7 @@ use futures::future;
 use futures::prelude::*;
 
 use super::board_poller::{BoardUpdate, ThreadUpdate};
-use super::database::{Database, InsertPosts};
+use super::database::{Database, InsertNewThread};
 use four_chan::fetcher::*;
 use four_chan::{self, Board};
 
@@ -30,7 +30,7 @@ impl ThreadUpdater {
         }
     }
 
-    fn handle_new(&mut self, no: u64, ctx: &mut <Self as Actor>::Context) {
+    fn insert_new_thread(&mut self, no: u64, ctx: &mut <Self as Actor>::Context) {
         let future = self
             .fetcher
             .send(FetchThread(self.board, no))
@@ -47,7 +47,7 @@ impl ThreadUpdater {
                         Arbiter::spawn(
                             // TODO: retry on error?
                             act.database
-                                .send(InsertPosts(act.board, thread))
+                                .send(InsertNewThread(act.board, thread))
                                 .map_err(|err| log_error!(&err))
                                 .and_then(|res| res.map_err(|err| error!("{}", err)))
                                 .and_then(move |filenames| {
@@ -82,7 +82,7 @@ impl Handler<BoardUpdate> for ThreadUpdater {
 
         for thread in msg.0 {
             match thread {
-                New(no) => self.handle_new(no, ctx),
+                New(no) => self.insert_new_thread(no, ctx),
                 Modified(_no) => {
                     // TODO: Insert if op modified
                     // TODO: Find modified posts (banned) and insert
