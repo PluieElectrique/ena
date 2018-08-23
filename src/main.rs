@@ -26,8 +26,11 @@ fn main() {
 
     let sys = System::new("ena");
 
-    let fetcher =
-        Fetcher::new(Duration::from_millis(config.fetch_delay), config.media_path).start();
+    let fetcher = Fetcher::new(Duration::from_millis(config.fetch_delay), config.media_path)
+        .unwrap_or_else(|err| {
+            log_error!(err.as_fail());
+            process::exit(1);
+        }).start();
 
     let database = Database::new(
         my::Pool::new(config.database_url),

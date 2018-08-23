@@ -6,6 +6,7 @@ use std::time::{Duration, Instant};
 
 use actix::prelude::*;
 use chrono::prelude::*;
+use failure::{Error, ResultExt};
 use futures::future;
 use futures::prelude::*;
 use hyper::client::{Client, HttpConnector};
@@ -41,17 +42,25 @@ impl Actor for Fetcher {
 }
 
 impl Fetcher {
-    pub fn new(fetch_delay: Duration, media_path: PathBuf) -> Self {
-        let https = HttpsConnector::new(2).expect("Could not create HttpsConnector");
+    pub fn new(fetch_delay: Duration, media_path: PathBuf) -> Result<Self, Error> {
+        if let Err(err) = std::fs::create_dir(&media_path) {
+            use std::io::ErrorKind;
+            match err.kind() {
+                ErrorKind::AlreadyExists => {}
+                _ => Err(err).context("Could not create media directory")?,
+            }
+        }
+
+        let https = HttpsConnector::new(2).context("Could not create HttpsConnector")?;
         let client = Client::builder().build::<_, Body>(https);
-        Self {
+        Ok(Self {
             client,
             last_modified: HashMap::new(),
             last_request: Instant::now() - fetch_delay,
             fetch_delay,
             media_path,
             runtime: Runtime::new().unwrap(),
-        }
+        })
     }
 
     fn get_delay(&mut self) -> Delay {
