@@ -43,7 +43,13 @@ fn main() {
     }).start();
 
     for board in config.boards {
-        let thread_updater = ThreadUpdater::new(board, database.clone(), fetcher.clone()).start();
+        let thread_updater = ThreadUpdater::new(
+            board,
+            database.clone(),
+            fetcher.clone(),
+            config.refetch_archived_threads,
+            config.always_add_archive_times,
+        ).start();
 
         // TODO: Should BoardPoller be able to handle multiple boards?
         BoardPoller::new(

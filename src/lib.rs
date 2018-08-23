@@ -74,11 +74,13 @@ pub struct Config {
     pub boards: Vec<four_chan::Board>,
     pub poll_interval: u64,
     pub fetch_delay: u64,
+    pub refetch_archived_threads: bool,
     pub deleted_page_threshold: u8,
     pub database_url: String,
     pub charset: String,
     pub media_path: PathBuf,
     pub adjust_timestamps: bool,
+    pub always_add_archive_times: bool,
 }
 
 #[derive(Debug, Fail)]

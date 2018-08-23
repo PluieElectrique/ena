@@ -14,6 +14,8 @@ pub struct ThreadUpdater {
     threads: HashMap<u64, Thread>,
     fetcher: Addr<Fetcher>,
     database: Addr<Database>,
+    refetch_archived_threads: bool,
+    always_add_archive_times: bool,
 }
 
 impl Actor for ThreadUpdater {
@@ -21,12 +23,20 @@ impl Actor for ThreadUpdater {
 }
 
 impl ThreadUpdater {
-    pub fn new(board: Board, database: Addr<Database>, fetcher: Addr<Fetcher>) -> Self {
+    pub fn new(
+        board: Board,
+        database: Addr<Database>,
+        fetcher: Addr<Fetcher>,
+        refetch_archived_threads: bool,
+        always_add_archive_times: bool,
+    ) -> Self {
         Self {
             board,
             threads: HashMap::new(),
             fetcher,
             database,
+            refetch_archived_threads,
+            always_add_archive_times,
         }
     }
 
@@ -78,8 +88,9 @@ impl Handler<BoardUpdate> for ThreadUpdater {
     type Result = ();
 
     fn handle(&mut self, msg: BoardUpdate, ctx: &mut Self::Context) {
-        use self::ThreadUpdate::*;
+        let mut removed_posts = vec![];
 
+        use self::ThreadUpdate::*;
         for thread in msg.0 {
             match thread {
                 New(no) => self.insert_new_thread(no, ctx),
@@ -89,28 +100,37 @@ impl Handler<BoardUpdate> for ThreadUpdater {
                     // TODO: Find deleted media and mark
                     // TODO: Insert new posts
                 }
-                BumpedOff(_no) => {
-                    // TODO: mark as removed
+                BumpedOff(no) => {
+                    self.threads.remove(&no);
+                    if self.board.is_archived() {
+                        if self.refetch_archived_threads {
+                            // TODO: handle as modified
+                        } else {
+                            removed_posts.push((no, RemovedStatus::Archived));
+                        }
+                    } else if self.always_add_archive_times {
+                        removed_posts.push((no, RemovedStatus::Archived));
+                    }
                 }
                 Deleted(no) => {
                     self.threads.remove(&no);
-
-                    let board = self.board;
-                    Arbiter::spawn(
-                        self.database
-                            .send(MarkPostsDeleted(self.board, vec![no], msg.1))
-                            .map_err(|err| error!("{}", err))
-                            .and_then(move |res| {
-                                res.map_err(|err| {
-                                    error!(
-                                        "Failed to mark /{}/ No. {} as deleted: {}",
-                                        board, no, err
-                                    )
-                                })
-                            }),
-                    );
+                    removed_posts.push((no, RemovedStatus::Deleted));
                 }
             }
+        }
+
+        if !removed_posts.is_empty() {
+            let board = self.board;
+            Arbiter::spawn(
+                self.database
+                    .send(MarkPostsRemoved(self.board, removed_posts, msg.1))
+                    .map_err(|err| error!("{}", err))
+                    .and_then(move |res| {
+                        res.map_err(|err| {
+                            error!("Failed to mark posts from /{}/ as removed: {}", board, err)
+                        })
+                    }),
+            );
         }
     }
 }

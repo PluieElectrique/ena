@@ -41,8 +41,8 @@ WHERE doc_id BETWEEN
     LAST_INSERT_ID()
     AND LAST_INSERT_ID() + ROW_COUNT() - 1;";
 
-const MARK_DELETED_QUERY: &str = "UPDATE `%%BOARD%%`
-SET deleted = TRUE, timestamp_expired = :timestamp_expired WHERE num = :num AND subnum = 0";
+const MARK_REMOVED_QUERY: &str = "UPDATE `%%BOARD%%`
+SET deleted = :deleted, timestamp_expired = :timestamp_expired WHERE num = :num AND subnum = 0";
 
 pub struct Database {
     pool: Pool,
@@ -130,10 +130,7 @@ impl Handler<InsertNewThread> for Database {
                 "comment" => post.comment.map(|comment| html::clean(&comment).unwrap()),
                 "sticky" => post.op_data.sticky,
                 // We only want to mark threads as locked if they are closed before being archived.
-                // This is because all archived threads are marked as closed. This function only
-                // inserts live threads, but in rare cases a thread may be archived between the
-                // threads.json poll and the fetch. So, we check here that the thread is not
-                // archived before marking it as locked.
+                // This is because all archived threads are marked as closed.
                 "locked" => post.op_data.closed && post.op_data.archived_on.is_none(),
                 "poster_hash" => post.id,
                 "poster_country" => post.country,
@@ -193,15 +190,20 @@ impl Handler<InsertNewThread> for Database {
     }
 }
 
-pub struct MarkPostsDeleted(pub Board, pub Vec<u64>, pub DateTime<Utc>);
-impl Message for MarkPostsDeleted {
+pub enum RemovedStatus {
+    Archived,
+    Deleted,
+}
+
+pub struct MarkPostsRemoved(pub Board, pub Vec<(u64, RemovedStatus)>, pub DateTime<Utc>);
+impl Message for MarkPostsRemoved {
     type Result = Result<(), my::errors::Error>;
 }
 
-impl Handler<MarkPostsDeleted> for Database {
+impl Handler<MarkPostsRemoved> for Database {
     type Result = ResponseFuture<(), my::errors::Error>;
 
-    fn handle(&mut self, msg: MarkPostsDeleted, _ctx: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, msg: MarkPostsRemoved, _ctx: &mut Self::Context) -> Self::Result {
         let timestamp_expired = if self.adjust_timestamps {
             msg.2
                 .with_timezone(&America::New_York)
@@ -211,17 +213,21 @@ impl Handler<MarkPostsDeleted> for Database {
             msg.2.timestamp() as u64
         };
 
-        let params = msg.1.into_iter().map(move |no| {
+        let params = msg.1.into_iter().map(move |(no, status)| {
             params! {
                 "num" => no,
+                "deleted" => match status {
+                    RemovedStatus::Archived => false,
+                    RemovedStatus::Deleted => true,
+                },
                 timestamp_expired,
             }
         });
-        let mark_deleted_query = MARK_DELETED_QUERY.replace(BOARD_REPLACE, &msg.0.to_string());
+        let mark_removed_query = MARK_REMOVED_QUERY.replace(BOARD_REPLACE, &msg.0.to_string());
         Box::new(
             self.pool
                 .get_conn()
-                .and_then(|conn| conn.batch_exec(mark_deleted_query, params))
+                .and_then(|conn| conn.batch_exec(mark_removed_query, params))
                 .map(|_conn| ()),
         )
     }
