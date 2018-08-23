@@ -81,6 +81,7 @@ pub struct Config {
     pub media_path: PathBuf,
     pub adjust_timestamps: bool,
     pub always_add_archive_times: bool,
+    pub create_index_counters: bool,
 }
 
 #[derive(Debug, Fail)]

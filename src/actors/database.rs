@@ -19,7 +19,7 @@ use html;
 const BOARD_REPLACE: &str = "%%BOARD%%";
 const CHARSET_REPLACE: &str = "%%CHARSET%%";
 const BOARD_SQL: &str = include_str!("../sql/boards.sql");
-const COMMON_SQL: &str = include_str!("../sql/common.sql");
+const INDEX_COUNTERS_SQL: &str = include_str!("../sql/index_counters.sql");
 const TRIGGER_SQL: &str = include_str!("../sql/triggers.sql");
 
 const INSERT_QUERY: &str = "INSERT INTO `%%BOARD%%` (num, subnum, thread_num, op, timestamp,
@@ -52,9 +52,10 @@ pub struct Database {
 impl Database {
     pub fn new(
         pool: Pool,
-        adjust_timestamps: bool,
         boards: &[Board],
         charset: &str,
+        adjust_timestamps: bool,
+        create_index_counters: bool,
     ) -> Result<Self, my::errors::Error> {
         let charset_board_sql = BOARD_SQL.replace(CHARSET_REPLACE, charset);
 
@@ -65,13 +66,22 @@ impl Database {
         }
 
         let mut runtime = Runtime::new().unwrap();
-        runtime.block_on(
-            pool.get_conn()
-                .and_then(|conn| conn.drop_query(init_sql))
-                .and_then(|conn| conn.drop_query(COMMON_SQL))
-                // If we don't disconnect the runtime won't shutdown
-                .and_then(|conn| conn.disconnect()),
-        )?;
+        if create_index_counters {
+            runtime.block_on(
+                pool.get_conn()
+                    .and_then(|conn| conn.drop_query(init_sql))
+                    .and_then(|conn| conn.drop_query(INDEX_COUNTERS_SQL))
+                    // If we don't disconnect the runtime won't shutdown
+                    .and_then(|conn| conn.disconnect()),
+            )?;
+        } else {
+            runtime.block_on(
+                pool.get_conn()
+                    .and_then(|conn| conn.drop_query(init_sql))
+                    // If we don't disconnect the runtime won't shutdown
+                    .and_then(|conn| conn.disconnect()),
+            )?;
+        }
         runtime.shutdown_on_idle().wait().unwrap();
 
         Ok(Self {

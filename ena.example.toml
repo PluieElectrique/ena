@@ -10,7 +10,7 @@ poll_interval = 30
 fetch_delay = 1_000
 
 # On boards that have archiving, fetch a thread again after it has been archived. This allows for
-# more accurate archive times (how much more depends on poll_interval) and catches sage posts and
+# more accurate archive times (how much more depends on `poll_interval`) and catches sage posts and
 # other changes which would have otherwise been missed, at the cost of an extra request.
 refetch_archived_threads = false
 
@@ -36,3 +36,6 @@ adjust_timestamps = true
 # Add archive times to bumped-off threads on boards that don't have archiving. (should be `false`
 # for compatibility)
 always_add_archive_times = false
+
+# Create the `index_counters` table used by Sphinx/FoolFuuka (should be `true` for compatibility)
+create_index_counters = true
