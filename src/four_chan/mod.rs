@@ -123,14 +123,14 @@ impl fmt::Display for Board {
 }
 
 impl Board {
-    pub fn max_threads(&self) -> u8 {
+    pub fn max_threads(self) -> u8 {
         match self {
             Board::f => 30,
             _ => 150,
         }
     }
 
-    pub fn is_archived(&self) -> bool {
+    pub fn is_archived(self) -> bool {
         match self {
             Board::b | Board::bant | Board::f | Board::trash => false,
             _ => true,
