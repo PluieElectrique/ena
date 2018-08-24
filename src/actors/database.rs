@@ -95,15 +95,15 @@ impl Actor for Database {
     type Context = Context<Self>;
 }
 
-pub struct InsertNewThread(pub Board, pub Vec<Post>);
-impl Message for InsertNewThread {
+pub struct InsertPosts(pub Board, pub Vec<Post>);
+impl Message for InsertPosts {
     type Result = Result<Vec<String>, my::errors::Error>;
 }
 
-impl Handler<InsertNewThread> for Database {
+impl Handler<InsertPosts> for Database {
     type Result = ResponseFuture<Vec<String>, my::errors::Error>;
 
-    fn handle(&mut self, msg: InsertNewThread, _ctx: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, msg: InsertPosts, _ctx: &mut Self::Context) -> Self::Result {
         debug!("Inserting /{}/ No. {}", msg.0, msg.1[0].no);
         let adjust_timestamps = self.adjust_timestamps;
         let params = msg.1.into_iter().map(move |post| {

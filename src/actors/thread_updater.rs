@@ -1,13 +1,14 @@
 use std::collections::HashMap;
 
 use actix::prelude::*;
+use chrono::prelude::*;
 use futures::future;
 use futures::prelude::*;
 
 use super::board_poller::{BoardUpdate, ThreadUpdate};
 use super::database::*;
 use four_chan::fetcher::*;
-use four_chan::{self, Board};
+use four_chan::{self, Board, Post};
 
 pub struct ThreadUpdater {
     board: Board,
@@ -40,47 +41,70 @@ impl ThreadUpdater {
         }
     }
 
-    fn insert_new_thread(&mut self, no: u64, ctx: &mut <Self as Actor>::Context) {
-        let future = self
-            .fetcher
-            .send(FetchThread(self.board, no))
-            // TODO: Retry on error?
-            .map_err(|err| log_error!(&err))
-            .into_actor(self)
-            .map(move |res, act, _ctx| {
-                match res {
-                    Ok(thread) => {
-                        act.threads.insert(no, Thread::from_thread(&thread));
+    fn insert_posts(&mut self, posts: Vec<Post>) {
+        let board = self.board;
+        let fetcher = self.fetcher.clone();
+        Arbiter::spawn(
+            // TODO: retry on error?
+            self.database
+                .send(InsertPosts(self.board, posts))
+                .map_err(|err| log_error!(&err))
+                .and_then(|res| res.map_err(|err| error!("{}", err)))
+                .and_then(move |filenames| {
+                    future::join_all(
+                        filenames
+                            .into_iter()
+                            .map(move |filename| fetcher.send(FetchMedia(board, filename))),
+                    ).map(|_| ())
+                    .map_err(|err| error!("{}", err))
+                }),
+        );
+    }
 
-                        let board = act.board;
-                        let fetcher = act.fetcher.clone();
-                        Arbiter::spawn(
-                            // TODO: retry on error?
-                            act.database
-                                .send(InsertNewThread(act.board, thread))
-                                .map_err(|err| log_error!(&err))
-                                .and_then(|res| res.map_err(|err| error!("{}", err)))
-                                .and_then(move |filenames| {
-                                    future::join_all(filenames.into_iter().map(move |filename| {
-                                        fetcher.send(FetchMedia(board, filename))
-                                    }))
-                                    .map(|_| ())
-                                    .map_err(|err| error!("{}", err))
-                                })
-                        );
+    fn handle_new(&mut self, no: u64, ctx: &mut <Self as Actor>::Context) {
+        ctx.spawn(
+            self.fetcher
+                .send(FetchThread(self.board, no))
+                // TODO: Retry on error?
+                .map_err(|err| log_error!(&err))
+                .into_actor(self)
+                .map(move |res, act, _ctx| {
+                    match res {
+                        Ok(thread) => {
+                            act.threads.insert(no, Thread::from_thread(&thread));
+                            act.insert_posts(thread);
+                        }
+                        Err(err) => match err {
+                            FetchError::NotFound => {
+                                warn!("/{}/ No. {}. was deleted before it could be inserted",
+                                    act.board,
+                                    no,
+                                );
+                                act.threads.remove(&no);
+                                act.handle_removed(vec![(no, RemovedStatus::Deleted)], Utc::now());
+                            },
+                            // TODO: retry request
+                            _ => log_error!(&err),
+                        }
                     }
-                    Err(err) => match err {
-                        FetchError::NotFound => warn!(
-                            "404 Not Found for /{}/ No. {}. Thread deleted between threads.json poll and fetch?",
-                            act.board,
-                            no,
-                        ),
-                        // TODO: retry request
-                        _ => log_error!(&err),
-                    }
-                }
-            });
-        ctx.spawn(future);
+                }),
+        );
+    }
+
+    fn handle_removed(&self, removed_posts: Vec<(u64, RemovedStatus)>, time: DateTime<Utc>) {
+        if !removed_posts.is_empty() {
+            let board = self.board;
+            Arbiter::spawn(
+                self.database
+                    .send(MarkPostsRemoved(self.board, removed_posts, time))
+                    .map_err(|err| error!("{}", err))
+                    .and_then(move |res| {
+                        res.map_err(|err| {
+                            error!("Failed to mark posts from /{}/ as removed: {}", board, err)
+                        })
+                    }),
+            );
+        }
     }
 }
 
@@ -93,7 +117,7 @@ impl Handler<BoardUpdate> for ThreadUpdater {
         use self::ThreadUpdate::*;
         for thread in msg.0 {
             match thread {
-                New(no) => self.insert_new_thread(no, ctx),
+                New(no) => self.handle_new(no, ctx),
                 Modified(_no) => {
                     // TODO: Insert if op modified
                     // TODO: Find modified posts (banned) and insert
@@ -118,20 +142,7 @@ impl Handler<BoardUpdate> for ThreadUpdater {
                 }
             }
         }
-
-        if !removed_posts.is_empty() {
-            let board = self.board;
-            Arbiter::spawn(
-                self.database
-                    .send(MarkPostsRemoved(self.board, removed_posts, msg.1))
-                    .map_err(|err| error!("{}", err))
-                    .and_then(move |res| {
-                        res.map_err(|err| {
-                            error!("Failed to mark posts from /{}/ as removed: {}", board, err)
-                        })
-                    }),
-            );
-        }
+        self.handle_removed(removed_posts, msg.1);
     }
 }
 
