@@ -13,7 +13,7 @@ use my::prelude::*;
 use my::{self, Pool};
 use tokio::runtime::Runtime;
 
-use four_chan::{Board, Post};
+use four_chan::{Board, OpData, Post};
 use html;
 
 const BOARD_REPLACE: &str = "%%BOARD%%";
@@ -41,8 +41,17 @@ WHERE doc_id BETWEEN
     LAST_INSERT_ID()
     AND LAST_INSERT_ID() + ROW_COUNT() - 1;";
 
+const UPDATE_OP_QUERY: &str = "UPDATE `%%BOARD%%`
+SET sticky = :sticky, locked = :locked, timestamp_expired = :timestamp_expired
+WHERE num = :num AND subnum = 0";
+
+const UPDATE_COMMENT_QUERY: &str = "UPDATE `%%BOARD%%`
+SET comment = :comment
+WHERE num = :num AND subnum = 0";
+
 const MARK_REMOVED_QUERY: &str = "UPDATE `%%BOARD%%`
-SET deleted = :deleted, timestamp_expired = :timestamp_expired WHERE num = :num AND subnum = 0";
+SET deleted = :deleted, timestamp_expired = :timestamp_expired
+WHERE num = :num AND subnum = 0";
 
 pub struct Database {
     pool: Pool,
@@ -200,6 +209,56 @@ impl Handler<InsertPosts> for Database {
                         files
                     })
                 }).map(|(_conn, files)| files),
+        )
+    }
+}
+
+pub struct UpdateOp(pub Board, pub u64, pub OpData);
+impl Message for UpdateOp {
+    type Result = Result<(), my::errors::Error>;
+}
+
+impl Handler<UpdateOp> for Database {
+    type Result = ResponseFuture<(), my::errors::Error>;
+
+    fn handle(&mut self, msg: UpdateOp, _ctx: &mut Self::Context) -> Self::Result {
+        let params = params! {
+            "num" => msg.1,
+            "sticky" => msg.2.sticky,
+            "locked" => msg.2.closed && !msg.2.archived,
+            "timestamp_expired" => msg.2.archived_on.map_or(0, |t| self.adjust_timestamp(t)),
+        };
+        let update_op_query = UPDATE_OP_QUERY.replace(BOARD_REPLACE, &msg.0.to_string());
+        Box::new(
+            self.pool
+                .get_conn()
+                .and_then(|conn| conn.batch_exec(update_op_query, params))
+                .map(|_conn| ()),
+        )
+    }
+}
+
+pub struct UpdateComment(pub Board, pub Vec<(u64, Option<String>)>);
+impl Message for UpdateComment {
+    type Result = Result<(), my::errors::Error>;
+}
+
+impl Handler<UpdateComment> for Database {
+    type Result = ResponseFuture<(), my::errors::Error>;
+
+    fn handle(&mut self, msg: UpdateComment, _ctx: &mut Self::Context) -> Self::Result {
+        let params = msg.1.into_iter().map(move |(no, comment)| {
+            params! {
+                "num" => no,
+                comment,
+            }
+        });
+        let update_comment_query = UPDATE_COMMENT_QUERY.replace(BOARD_REPLACE, &msg.0.to_string());
+        Box::new(
+            self.pool
+                .get_conn()
+                .and_then(|conn| conn.batch_exec(update_comment_query, params))
+                .map(|_conn| ()),
         )
     }
 }
