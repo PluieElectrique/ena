@@ -89,6 +89,17 @@ impl Database {
             adjust_timestamps,
         })
     }
+
+    fn adjust_timestamp(&self, utc_timestamp: u64) -> u64 {
+        if self.adjust_timestamps {
+            America::New_York
+                .timestamp(utc_timestamp as i64, 0)
+                .naive_local()
+                .timestamp() as u64
+        } else {
+            utc_timestamp
+        }
+    }
 }
 
 impl Actor for Database {
@@ -104,9 +115,7 @@ impl Handler<InsertPosts> for Database {
     type Result = ResponseFuture<Vec<String>, my::errors::Error>;
 
     fn handle(&mut self, msg: InsertPosts, _ctx: &mut Self::Context) -> Self::Result {
-        debug!("Inserting /{}/ No. {}", msg.0, msg.1[0].no);
-        let adjust_timestamps = self.adjust_timestamps;
-        let params = msg.1.into_iter().map(move |post| {
+        let params: Vec<_> = msg.1.into_iter().map(|post| {
             let mut params = params! {
                 "num" => post.no,
                 "subnum" => 0,
@@ -116,13 +125,8 @@ impl Handler<InsertPosts> for Database {
                     post.reply_to
                 },
                 "op" => post.reply_to == 0,
-                "timestamp" => if adjust_timestamps {
-                    let datetime = America::New_York.timestamp(post.time as i64, 0);
-                    datetime.naive_local().timestamp() as u64
-                } else {
-                    post.time
-                },
-                "timestamp_expired" => post.op_data.archived_on.unwrap_or(0),
+                "timestamp" => self.adjust_timestamp(post.time),
+                "timestamp_expired" => post.op_data.archived_on.map_or(0, |t| self.adjust_timestamp(t)),
                 "capcode" => {
                     post.capcode.map_or(String::from("N"), |mut capcode| {
                         if capcode == "manager" {
@@ -141,7 +145,7 @@ impl Handler<InsertPosts> for Database {
                 "sticky" => post.op_data.sticky,
                 // We only want to mark threads as locked if they are closed before being archived.
                 // This is because all archived threads are marked as closed.
-                "locked" => post.op_data.closed && post.op_data.archived_on.is_none(),
+                "locked" => post.op_data.closed && !post.op_data.archived,
                 "poster_hash" => post.id,
                 "poster_country" => post.country,
             };
@@ -177,7 +181,7 @@ impl Handler<InsertPosts> for Database {
             params.append(&mut image_params);
 
             params
-        });
+        }).collect();
 
         let insert_query = INSERT_QUERY.replace(BOARD_REPLACE, &msg.0.to_string());
         let new_media_query = NEW_MEDIA_QUERY.replace(BOARD_REPLACE, &msg.0.to_string());
@@ -214,15 +218,7 @@ impl Handler<MarkPostsRemoved> for Database {
     type Result = ResponseFuture<(), my::errors::Error>;
 
     fn handle(&mut self, msg: MarkPostsRemoved, _ctx: &mut Self::Context) -> Self::Result {
-        let timestamp_expired = if self.adjust_timestamps {
-            msg.2
-                .with_timezone(&America::New_York)
-                .naive_local()
-                .timestamp() as u64
-        } else {
-            msg.2.timestamp() as u64
-        };
-
+        let timestamp_expired = self.adjust_timestamp(msg.2.timestamp() as u64);
         let params = msg.1.into_iter().map(move |(no, status)| {
             params! {
                 "num" => no,
