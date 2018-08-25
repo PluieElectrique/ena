@@ -56,7 +56,7 @@ pub struct Post {
     pub image: Option<PostImage>,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq)]
 pub struct OpData {
     #[serde(deserialize_with = "num_to_bool")]
     #[serde(default)]

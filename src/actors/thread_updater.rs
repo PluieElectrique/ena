@@ -12,7 +12,7 @@ use four_chan::{self, Board, Post};
 
 pub struct ThreadUpdater {
     board: Board,
-    threads: HashMap<u64, Thread>,
+    thread_meta: HashMap<u64, ThreadMetadata>,
     fetcher: Addr<Fetcher>,
     database: Addr<Database>,
     refetch_archived_threads: bool,
@@ -33,7 +33,7 @@ impl ThreadUpdater {
     ) -> Self {
         Self {
             board,
-            threads: HashMap::new(),
+            thread_meta: HashMap::new(),
             fetcher,
             database,
             refetch_archived_threads,
@@ -62,33 +62,135 @@ impl ThreadUpdater {
     }
 
     fn handle_new(&mut self, no: u64, ctx: &mut <Self as Actor>::Context) {
-        ctx.spawn(
-            self.fetcher
-                .send(FetchThread(self.board, no))
-                // TODO: Retry on error?
-                .map_err(|err| log_error!(&err))
-                .into_actor(self)
-                .map(move |res, act, _ctx| {
-                    match res {
-                        Ok(thread) => {
-                            act.threads.insert(no, Thread::from_thread(&thread));
-                            act.insert_posts(thread);
-                        }
-                        Err(err) => match err {
-                            FetchError::NotFound => {
-                                warn!("/{}/ No. {}. was deleted before it could be inserted",
+        let future = self.fetcher
+            .send(FetchThread(self.board, no))
+            // TODO: Retry on error?
+            .map_err(|err| log_error!(&err))
+            .into_actor(self)
+            .map(move |res, act, _ctx| {
+                match res {
+                    Ok(thread) => {
+                        act.thread_meta.insert(no, ThreadMetadata::from_thread(&thread));
+                        act.insert_posts(thread);
+                    }
+                    Err(err) => match err {
+                        FetchError::NotFound => {
+                            warn!("/{}/ No. {}. was deleted before it could be inserted",
+                                act.board,
+                                no,
+                            );
+                            act.thread_meta.remove(&no);
+                            act.handle_removed(vec![(no, RemovedStatus::Deleted)], Utc::now());
+                        },
+                        // TODO: retry request
+                        _ => log_error!(&err),
+                    }
+                }
+            });
+        ctx.spawn(future);
+    }
+
+    fn handle_modified(
+        &mut self,
+        no: u64,
+    ) -> impl ActorFuture<Actor = Self, Item = (), Error = ()> {
+        self.fetcher
+            .send(FetchThread(self.board, no))
+            // TODO: Retry on error?
+            .map_err(|err| log_error!(&err))
+            .into_actor(self)
+            .map(move |res, act, _ctx| {
+                match res {
+                    Ok(thread) => {
+                        let curr_meta = ThreadMetadata::from_thread(&thread);
+                        let prev_meta = match act.thread_meta.remove(&no) {
+                            Some(meta) => meta,
+                            None => {
+                                error!(
+                                    "/{}/ No. {} was \"modified\" but not found in the threads map. Inserting whole thread",
                                     act.board,
                                     no,
                                 );
-                                act.threads.remove(&no);
-                                act.handle_removed(vec![(no, RemovedStatus::Deleted)], Utc::now());
+                                act.thread_meta.insert(no, curr_meta);
+                                act.insert_posts(thread);
+                                return;
                             },
-                            // TODO: retry request
-                            _ => log_error!(&err),
+                        };
+
+                        let mut deleted_posts = vec![];
+                        let mut modified_posts = vec![];
+                        let mut new_posts = vec![];
+
+                        if prev_meta.op_data != curr_meta.op_data {
+                            Arbiter::spawn(
+                                act.database
+                                    .send(UpdateOp(act.board, no, curr_meta.op_data.clone()))
+                                    .map_err(|err| error!("{}", err))
+                                    .and_then(|res| res.map_err(|err| error!("{}", err)))
+                            );
                         }
+
+                        {
+                            let mut post_iter = thread.into_iter();
+                            let mut prev_meta_iter = prev_meta.posts.iter();
+                            let mut curr_meta_iter = curr_meta.posts.iter();
+
+                            let mut curr_post = post_iter.next();
+                            let mut prev_meta = prev_meta_iter.next();
+                            let mut curr_meta = curr_meta_iter.next();
+
+                            loop {
+                                match (prev_meta, curr_meta) {
+                                    (Some(prev), Some(curr)) => {
+                                        if prev.no == curr.no {
+                                            if prev.comment_len != curr.comment_len {
+                                                let curr_post = curr_post.unwrap();
+                                                modified_posts.push((curr_post.no, curr_post.comment));
+                                            }
+                                            curr_post = post_iter.next();
+                                            prev_meta = prev_meta_iter.next();
+                                            curr_meta = curr_meta_iter.next();
+                                        } else {
+                                            deleted_posts.push((prev.no, RemovedStatus::Deleted));
+                                            prev_meta = prev_meta_iter.next();
+                                        }
+                                    }
+                                    (Some(prev), None) => {
+                                        deleted_posts.push((prev.no, RemovedStatus::Deleted));
+                                        prev_meta = prev_meta_iter.next();
+                                    },
+                                    (None, Some(_curr)) => {
+                                        new_posts.push(curr_post.unwrap());
+                                        curr_post = post_iter.next();
+                                        curr_meta = curr_meta_iter.next();
+                                    }
+                                    (None, None) => break,
+                                }
+                            }
+                        }
+                        act.handle_removed(deleted_posts, Utc::now());
+                        act.insert_posts(new_posts);
+                        Arbiter::spawn(
+                            act.database.send(UpdateComment(act.board, modified_posts))
+                                .map_err(|err| error!("{}", err))
+                                .and_then(|res| res.map_err(|err| error!("{}", err)))
+                        );
+                        act.thread_meta.insert(no, curr_meta);
                     }
-                }),
-        );
+                    Err(err) => match err {
+                        FetchError::NotFound => {
+                            warn!("/{}/ No. {}. was deleted before it could be updated",
+                                act.board,
+                                no,
+                            );
+                            act.thread_meta.remove(&no);
+                            act.handle_removed(vec![(no, RemovedStatus::Deleted)], Utc::now());
+                        },
+                        // TODO: retry request
+                        _ => log_error!(&err),
+                    }
+                }
+            })
     }
 
     fn handle_removed(&self, removed_posts: Vec<(u64, RemovedStatus)>, time: DateTime<Utc>) {
@@ -112,60 +214,53 @@ impl Handler<BoardUpdate> for ThreadUpdater {
     type Result = ();
 
     fn handle(&mut self, msg: BoardUpdate, ctx: &mut Self::Context) {
-        let mut removed_posts = vec![];
+        let mut removed_threads = vec![];
 
         use self::ThreadUpdate::*;
         for thread in msg.0 {
             match thread {
                 New(no) => self.handle_new(no, ctx),
-                Modified(_no) => {
-                    // TODO: Insert if op modified
-                    // TODO: Find modified posts (banned) and insert
-                    // TODO: Find deleted media and mark
-                    // TODO: Insert new posts
+                Modified(no) => {
+                    ctx.spawn(self.handle_modified(no));
                 }
                 BumpedOff(no) => {
-                    self.threads.remove(&no);
+                    // If this is true, we will remove the thread's metadata after we update it
+                    if !(self.board.is_archived() && self.refetch_archived_threads) {
+                        self.thread_meta.remove(&no);
+                    }
+
                     if self.board.is_archived() {
                         if self.refetch_archived_threads {
-                            // TODO: handle as modified
+                            ctx.spawn(self.handle_modified(no).map(move |_, act, _ctx| {
+                                act.thread_meta.remove(&no);
+                            }));
                         } else {
-                            removed_posts.push((no, RemovedStatus::Archived));
+                            removed_threads.push((no, RemovedStatus::Archived));
                         }
                     } else if self.always_add_archive_times {
-                        removed_posts.push((no, RemovedStatus::Archived));
+                        removed_threads.push((no, RemovedStatus::Archived));
                     }
                 }
                 Deleted(no) => {
-                    self.threads.remove(&no);
-                    removed_posts.push((no, RemovedStatus::Deleted));
+                    self.thread_meta.remove(&no);
+                    removed_threads.push((no, RemovedStatus::Deleted));
                 }
             }
         }
-        self.handle_removed(removed_posts, msg.1);
+        self.handle_removed(removed_threads, msg.1);
     }
 }
 
-struct Thread {
-    no: u64,
+struct ThreadMetadata {
     op_data: four_chan::OpData,
     posts: Vec<PostMetadata>,
 }
 
-impl Thread {
+impl ThreadMetadata {
     fn from_thread(thread: &[four_chan::Post]) -> Self {
-        let posts = thread
-            .iter()
-            .map(|post| PostMetadata {
-                no: post.no,
-                comment_len: post.comment.as_ref().map(|c| c.len()).unwrap_or(0),
-                //file_deleted: post.image.as_ref().map(|i| i.file_deleted).unwrap_or(false),
-            }).collect();
-
         Self {
-            no: thread[0].no,
             op_data: thread[0].op_data.clone(),
-            posts,
+            posts: thread.iter().map(PostMetadata::from).collect(),
         }
     }
 }
@@ -178,4 +273,14 @@ struct PostMetadata {
     comment_len: usize,
     // The Asagi/FoolFuuka schema currently doesn't track this
     //file_deleted: bool,
+}
+
+impl<'a> From<&'a Post> for PostMetadata {
+    fn from(post: &Post) -> Self {
+        Self {
+            no: post.no,
+            comment_len: post.comment.as_ref().map_or(0, |c| c.len()),
+            //file_deleted: post.image.as_ref().map_or(false, |i| i.file_deleted),
+        }
+    }
 }
