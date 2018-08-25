@@ -15,10 +15,8 @@ use hyper::{self, Body, StatusCode, Uri};
 use hyper_tls::HttpsConnector;
 use serde_json;
 use tokio;
-use tokio::io;
 use tokio::runtime::Runtime;
 use tokio::timer::Delay;
-use tokio_fs;
 
 use super::*;
 
@@ -32,7 +30,7 @@ pub struct Fetcher {
     last_request: Instant,
     fetch_delay: Duration,
     media_path: PathBuf,
-    // Fetcher must use its own runtime because tokio-fs functions can't use the current_thread
+    // Fetcher must use its own runtime because tokio::fs functions can't use the current_thread
     // runtime that Actix provides
     runtime: Runtime,
 }
@@ -350,13 +348,13 @@ impl Handler<FetchMedia> for Fetcher {
             }).join(tokio::fs::File::create(temp_path.clone()).from_err())
             .and_then(|(res, file)| {
                 res.into_body().from_err().fold(file, |file, chunk| {
-                    io::write_all(file, chunk)
+                    tokio::io::write_all(file, chunk)
                         .from_err::<FetchError>()
                         .map(|(file, _)| file)
                 })
             }).and_then(|_| {
                 debug!("Writing {:?}", real_path);
-                tokio_fs::rename(temp_path, real_path).from_err()
+                tokio::fs::rename(temp_path, real_path).from_err()
             })
             // TODO: Retry request
             .map_err(|err| log_error!(&err));
