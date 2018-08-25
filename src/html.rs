@@ -1,3 +1,5 @@
+#![cfg_attr(feature = "cargo-clippy", allow(trivial_regex))]
+
 use html5ever::driver::ParseOpts;
 use html5ever::rcdom::RcDom;
 use html5ever::serialize::{AttrRef, Serialize, Serializer, TraversalScope};
@@ -34,8 +36,6 @@ pub fn unescape(input: &str) -> String {
     // like `&amp;gt;` into `>`
     let input = AMP_ENTITY.replace_all(&input, "&");
 
-    // TODO: If this clone is too inefficient, make this function return Option<String>, and return
-    // None on Cow::Borrowed, and let the caller substitute their original string
     input.to_string()
 }
 
