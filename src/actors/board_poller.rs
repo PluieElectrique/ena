@@ -85,34 +85,30 @@ impl BoardPoller {
             let mut prev_iter = self.threads.iter();
             let mut curr_iter = curr_threads.iter();
 
-            let mut prev_thread = prev_iter.next();
             let mut curr_thread = curr_iter.next();
 
             loop {
-                match (prev_thread, curr_thread) {
+                match (prev_iter.next(), curr_thread) {
                     (Some(prev), Some(curr)) => {
                         assert!(prev.no <= curr.no);
 
-                        if prev.no < curr.no {
-                            push_removed(prev, &mut updates);
-                            prev_thread = prev_iter.next();
-                        } else if prev.no == curr.no {
+                        if prev.no == curr.no {
                             assert!(prev.last_modified <= curr.last_modified);
 
                             if prev.last_modified < curr.last_modified {
                                 updates.push(Modified(curr.no));
                             }
-                            prev_thread = prev_iter.next();
                             curr_thread = curr_iter.next();
+                        } else if prev.no < curr.no {
+                            push_removed(prev, &mut updates);
                         }
                     }
                     (Some(prev), None) => {
                         push_removed(prev, &mut updates);
-                        prev_thread = prev_iter.next();
                     }
                     (None, Some(curr)) => {
-                        updates.push(New(curr.no));
                         new_threads = true;
+                        updates.push(New(curr.no));
                         curr_thread = curr_iter.next();
                     }
                     (None, None) => break,
