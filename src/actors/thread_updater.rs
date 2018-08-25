@@ -101,7 +101,7 @@ impl ThreadUpdater {
             .into_actor(self)
             .map(move |res, act, _ctx| {
                 match res {
-                    Ok(thread) => {
+                    Ok(mut thread) => {
                         let curr_meta = ThreadMetadata::from_thread(&thread);
                         let prev_meta = match act.thread_meta.remove(&no) {
                             Some(meta) => meta,
@@ -117,10 +117,6 @@ impl ThreadUpdater {
                             },
                         };
 
-                        let mut deleted_posts = vec![];
-                        let mut modified_posts = vec![];
-                        let mut new_posts = vec![];
-
                         if prev_meta.op_data != curr_meta.op_data {
                             Arbiter::spawn(
                                 act.database
@@ -130,51 +126,45 @@ impl ThreadUpdater {
                             );
                         }
 
+                        let mut new_posts = vec![];
+                        let mut modified_posts = vec![];
+                        let mut deleted_posts = vec![];
                         {
-                            let mut post_iter = thread.into_iter();
-                            let mut prev_meta_iter = prev_meta.posts.iter();
-                            let mut curr_meta_iter = curr_meta.posts.iter();
+                            let mut prev_iter = prev_meta.posts.iter();
+                            let mut curr_iter = curr_meta.posts.iter().enumerate();
 
-                            let mut curr_post = post_iter.next();
-                            let mut prev_meta = prev_meta_iter.next();
-                            let mut curr_meta = curr_meta_iter.next();
+                            let mut curr_meta = curr_iter.next();
 
                             loop {
-                                match (prev_meta, curr_meta) {
-                                    (Some(prev), Some(curr)) => {
+                                match (prev_iter.next(), curr_meta) {
+                                    (Some(prev), Some((i, curr))) => {
                                         if prev.no == curr.no {
                                             if prev.comment_len != curr.comment_len {
-                                                let curr_post = curr_post.unwrap();
-                                                modified_posts.push((curr_post.no, curr_post.comment));
+                                                modified_posts.push((thread[i].no, thread[i].comment.take()));
                                             }
-                                            curr_post = post_iter.next();
-                                            prev_meta = prev_meta_iter.next();
-                                            curr_meta = curr_meta_iter.next();
+                                            curr_meta = curr_iter.next();
                                         } else {
                                             deleted_posts.push((prev.no, RemovedStatus::Deleted));
-                                            prev_meta = prev_meta_iter.next();
                                         }
                                     }
                                     (Some(prev), None) => {
                                         deleted_posts.push((prev.no, RemovedStatus::Deleted));
-                                        prev_meta = prev_meta_iter.next();
                                     },
-                                    (None, Some(_curr)) => {
-                                        new_posts.push(curr_post.unwrap());
-                                        curr_post = post_iter.next();
-                                        curr_meta = curr_meta_iter.next();
+                                    (None, Some((i, _))) => {
+                                        new_posts = thread.split_off(i);
+                                        break;
                                     }
                                     (None, None) => break,
                                 }
                             }
                         }
-                        act.handle_removed(deleted_posts, Utc::now());
                         act.insert_posts(new_posts);
                         Arbiter::spawn(
                             act.database.send(UpdateComment(act.board, modified_posts))
                                 .map_err(|err| error!("{}", err))
                                 .and_then(|res| res.map_err(|err| error!("{}", err)))
                         );
+                        act.handle_removed(deleted_posts, Utc::now());
                         act.thread_meta.insert(no, curr_meta);
                     }
                     Err(err) => match err {
