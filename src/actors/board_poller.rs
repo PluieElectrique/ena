@@ -91,27 +91,19 @@ impl BoardPoller {
             loop {
                 match (prev_thread, curr_thread) {
                     (Some(prev), Some(curr)) => {
+                        assert!(prev.no <= curr.no);
+
                         if prev.no < curr.no {
                             push_removed(prev, &mut updates);
                             prev_thread = prev_iter.next();
                         } else if prev.no == curr.no {
+                            assert!(prev.last_modified <= curr.last_modified);
+
                             if prev.last_modified < curr.last_modified {
                                 updates.push(Modified(curr.no));
-                            } else if prev.last_modified > curr.last_modified {
-                                warn!(
-                                    "Got old data for /{}/, skipping rest of threads.json",
-                                    self.board
-                                );
-                                return;
                             }
                             prev_thread = prev_iter.next();
                             curr_thread = curr_iter.next();
-                        } else if prev.no > curr.no {
-                            warn!(
-                                "Got old data for /{}/, skipping rest of threads.json",
-                                self.board
-                            );
-                            return;
                         }
                     }
                     (Some(prev), None) => {
