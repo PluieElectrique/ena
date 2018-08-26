@@ -181,7 +181,7 @@ impl Handler<UpdateLastFetched> for Fetcher {
 #[derive(Debug)]
 pub struct FetchThread(pub Board, pub u64);
 impl Message for FetchThread {
-    type Result = Result<Vec<Post>, FetchError>;
+    type Result = Result<(Vec<Post>, DateTime<Utc>), FetchError>;
 }
 
 impl Into<Uri> for FetchThread {
@@ -195,7 +195,7 @@ impl Into<Uri> for FetchThread {
 }
 
 impl Handler<FetchThread> for Fetcher {
-    type Result = ResponseFuture<Vec<Post>, FetchError>;
+    type Result = ResponseFuture<(Vec<Post>, DateTime<Utc>), FetchError>;
 
     fn handle(&mut self, msg: FetchThread, _ctx: &mut Self::Context) -> Self::Result {
         let fetch = self.client.get(msg.into());
@@ -212,13 +212,23 @@ impl Handler<FetchThread> for Fetcher {
                     StatusCode::NOT_FOUND => future::err(FetchError::NotFound),
                     _ => future::err(res.status().into()),
                 })
-                .and_then(|res| res.into_body().concat2().from_err())
-                .and_then(move |body| {
+                .and_then(|res| {
+                    let last_modified = res
+                        .headers()
+                        .get(header::LAST_MODIFIED)
+                        .map(|last| {
+                            Utc.datetime_from_str(last.to_str().unwrap(), RFC_1123_FORMAT).unwrap()
+                        }).unwrap_or_else(Utc::now);
+
+                    res.into_body().concat2().from_err()
+                        .join(future::ok(last_modified))
+                })
+                .and_then(move |(body, last_modified)| {
                     let PostsWrapper { posts } = serde_json::from_slice(&body)?;
                     if posts.is_empty() {
                         Err(FetchError::Empty)
                     } else {
-                        Ok(posts)
+                        Ok((posts, last_modified))
                     }
                 }),
         )

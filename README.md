@@ -11,7 +11,7 @@ A 4chan scraper. Currently designed to be a (mostly) compatible replacement for 
 * Closed posts remain locked even after they are archived (In Asagi, closed posts are unlocked on the refetch after archival)
 * The old media/thumbs directory structure is not supported
 * A different bumped off/deleted algorithm
-* When possible, the `timestamp_expired` for a deleted thread is taken from the `Last-Modified` header of the `threads.json` poll, and not the time at which the deleted thread was processed
+* When possible, the `timestamp_expired` for a deleted thread or post is taken from the `Last-Modified` header of the request, and not the time at which the deleted thread or post was processed
 * PostgreSQL is currently not supported
 
 ## Legal

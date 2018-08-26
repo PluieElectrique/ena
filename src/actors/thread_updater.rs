@@ -69,7 +69,7 @@ impl ThreadUpdater {
             .into_actor(self)
             .map(move |res, act, _ctx| {
                 match res {
-                    Ok(thread) => {
+                    Ok((thread, _)) => {
                         debug!("Inserting new thread /{}/ No. {}", act.board, no);
                         act.thread_meta.insert(no, ThreadMetadata::from_thread(&thread));
                         act.insert_posts(thread);
@@ -103,7 +103,7 @@ impl ThreadUpdater {
             .into_actor(self)
             .map(move |res, act, _ctx| {
                 match res {
-                    Ok(mut thread) => {
+                    Ok((mut thread, last_modified)) => {
                         let curr_meta = ThreadMetadata::from_thread(&thread);
                         let prev_meta = match act.thread_meta.remove(&no) {
                             Some(meta) => meta,
@@ -175,7 +175,7 @@ impl ThreadUpdater {
                                 .map_err(|err| error!("{}", err))
                                 .and_then(|res| res.map_err(|err| error!("{}", err)))
                         );
-                        act.handle_removed(deleted_posts, Utc::now());
+                        act.handle_removed(deleted_posts, last_modified);
                         act.thread_meta.insert(no, curr_meta);
                     }
                     Err(err) => match err {
