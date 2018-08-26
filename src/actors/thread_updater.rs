@@ -70,12 +70,13 @@ impl ThreadUpdater {
             .map(move |res, act, _ctx| {
                 match res {
                     Ok(thread) => {
+                        debug!("Inserting new thread /{}/ No. {}", act.board, no);
                         act.thread_meta.insert(no, ThreadMetadata::from_thread(&thread));
                         act.insert_posts(thread);
                     }
                     Err(err) => match err {
                         FetchError::NotFound => {
-                            warn!("/{}/ No. {}. was deleted before it could be inserted",
+                            warn!("/{}/ No. {} was deleted before it could be inserted",
                                 act.board,
                                 no,
                             );
@@ -169,7 +170,7 @@ impl ThreadUpdater {
                     }
                     Err(err) => match err {
                         FetchError::NotFound => {
-                            warn!("/{}/ No. {}. was deleted before it could be updated",
+                            warn!("/{}/ No. {} was deleted before it could be updated",
                                 act.board,
                                 no,
                             );

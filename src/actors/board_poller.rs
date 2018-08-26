@@ -151,10 +151,10 @@ impl BoardPoller {
                     .map_err(|err| log_error!(&err))
                     .into_actor(act)
                     .map(|res, act, ctx| {
+                        debug!("Fetched threads from /{}/", act.board);
                         match res {
                             Ok((threads, last_modified)) => {
                                 act.update_threads(threads, last_modified);
-                                debug!("Fetched and updated threads from /{}/", act.board);
                             }
                             Err(err) => match err {
                                 FetchError::NotModified => {}
