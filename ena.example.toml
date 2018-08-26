@@ -9,11 +9,6 @@ poll_interval = 30
 # Milliseconds of delay between simultaneous requests
 fetch_delay = 1_000
 
-# On boards that have archiving, fetch a thread again after it has been archived. This allows for
-# more accurate archive times (how much more depends on `poll_interval`) and catches sage posts and
-# other changes which would have otherwise been missed, at the cost of an extra request.
-refetch_archived_threads = false
-
 # In ambiguous situations, if a thread disappears, and was last seen on a page after this one, it is
 # considered to have been bumped off. For example, if the threshold is 7, and a thread disappears
 # from pages 1-7, it was deleted. Otherwise, it was bumped off.
@@ -32,6 +27,12 @@ media_dir = "media"
 
 # Adjust timestamps to EST/EDT (should be `true` for compatibility)
 adjust_timestamps = true
+
+# On boards that have archiving, fetch a thread again after it has been archived. This allows for
+# more accurate archive times (how much more depends on `poll_interval`) and catches sage posts and
+# other changes which would have otherwise been missed, at the cost of an extra request. (should be
+# `true` for compatibility)
+refetch_archived_threads = true
 
 # Add archive times to bumped-off threads on boards that don't have archiving. (should be `false`
 # for compatibility)
