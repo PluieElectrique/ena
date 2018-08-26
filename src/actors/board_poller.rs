@@ -117,7 +117,7 @@ impl BoardPoller {
         }
 
         // If the thread count has decreased but there are no new threads, then any "bumped off"
-        // threads was likely deleted.
+        // threads were likely deleted.
         if self.threads.len() == max_threads && curr_threads.len() < max_threads && !new_threads {
             for update in &mut updates {
                 if let BumpedOff(no) = *update {
