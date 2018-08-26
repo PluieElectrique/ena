@@ -160,6 +160,15 @@ impl ThreadUpdater {
                                 }
                             }
                         }
+                        debug!(
+                            "/{}/ No. {} has {} new post(s), {} modified post(s), and {} deleted post(s)",
+                            act.board,
+                            no,
+                            new_posts.len(),
+                            modified_posts.len(),
+                            deleted_posts.len(),
+                        );
+
                         act.insert_posts(new_posts);
                         Arbiter::spawn(
                             act.database.send(UpdateComment(act.board, modified_posts))
@@ -223,7 +232,10 @@ impl Handler<BoardUpdate> for ThreadUpdater {
                 BumpedOff(no) => {
                     // If this is true, we will remove the thread's metadata after we update it
                     if !(self.board.is_archived() && self.refetch_archived_threads) {
+                        debug!("/{}/ No. {} was bumped off", self.board, no);
                         self.thread_meta.remove(&no);
+                    } else {
+                        debug!("/{}/ No. {} was bumped off, refetching", self.board, no);
                     }
 
                     if self.board.is_archived() {
@@ -241,6 +253,7 @@ impl Handler<BoardUpdate> for ThreadUpdater {
                     }
                 }
                 Deleted(no) => {
+                    debug!("/{}/ No. {} was deleted", self.board, no);
                     self.thread_meta.remove(&no);
                     removed_threads.push((no, RemovedStatus::Deleted));
                 }
