@@ -232,7 +232,7 @@ impl Handler<UpdateOp> for Database {
         Box::new(
             self.pool
                 .get_conn()
-                .and_then(|conn| conn.batch_exec(update_op_query, params))
+                .and_then(|conn| conn.drop_exec(update_op_query, params))
                 .map(|_conn| ()),
         )
     }
