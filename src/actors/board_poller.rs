@@ -4,6 +4,7 @@ use actix::prelude::*;
 use chrono::prelude::*;
 use futures::prelude::*;
 
+use super::ThreadUpdater;
 use four_chan::fetcher::{FetchError, FetchThreads, Fetcher};
 use four_chan::{Board, Thread};
 
@@ -12,7 +13,7 @@ pub struct BoardPoller {
     threads: Vec<Thread>,
     interval: u64,
     deleted_page_threshold: u8,
-    subscribers: Vec<Recipient<BoardUpdate>>,
+    thread_updater: Addr<ThreadUpdater>,
     fetcher: Addr<Fetcher>,
 }
 
@@ -29,7 +30,7 @@ impl BoardPoller {
         board: Board,
         interval: u64,
         deleted_page_threshold: u8,
-        subscribers: Vec<Recipient<BoardUpdate>>,
+        thread_updater: Addr<ThreadUpdater>,
         fetcher: Addr<Fetcher>,
     ) -> Self {
         Self {
@@ -37,7 +38,7 @@ impl BoardPoller {
             threads: vec![],
             interval,
             deleted_page_threshold,
-            subscribers,
+            thread_updater,
             fetcher,
         }
     }
@@ -133,13 +134,11 @@ impl BoardPoller {
             updates
         );
 
-        for subscriber in &self.subscribers {
-            Arbiter::spawn(
-                subscriber
-                    .send(BoardUpdate(updates.clone(), last_modified))
-                    .map_err(|err| error!("{}", err)),
-            );
-        }
+        Arbiter::spawn(
+            self.thread_updater
+                .send(BoardUpdate(updates, last_modified))
+                .map_err(|err| error!("{}", err)),
+        );
         self.threads = curr_threads;
     }
 
@@ -171,7 +170,7 @@ impl BoardPoller {
 #[derive(Message)]
 pub struct BoardUpdate(pub Vec<ThreadUpdate>, pub DateTime<Utc>);
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub enum ThreadUpdate {
     New(u64),
     Modified(u64),

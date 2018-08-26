@@ -52,12 +52,11 @@ fn main() {
             config.always_add_archive_times,
         ).start();
 
-        // TODO: Should BoardPoller be able to handle multiple boards?
         BoardPoller::new(
             board,
             config.poll_interval,
             config.deleted_page_threshold,
-            vec![thread_updater.recipient()],
+            thread_updater,
             fetcher.clone(),
         ).start();
     }
