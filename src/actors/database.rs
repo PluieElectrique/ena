@@ -10,7 +10,7 @@ use chrono::prelude::*;
 use chrono_tz::America;
 use futures::prelude::*;
 use my::prelude::*;
-use my::{self, Pool};
+use my::{self, Pool, Value};
 use tokio::runtime::Runtime;
 
 use four_chan::{Board, OpData, Post};
@@ -43,6 +43,10 @@ WHERE doc_id BETWEEN
 
 const UPDATE_OP_QUERY: &str = "UPDATE `%%BOARD%%`
 SET sticky = :sticky, locked = :locked, timestamp_expired = :timestamp_expired
+WHERE num = :num AND subnum = 0";
+
+const UPDATE_OP_NO_LOCK_QUERY: &str = "UPDATE `%%BOARD%%`
+SET sticky = :sticky, timestamp_expired = :timestamp_expired
 WHERE num = :num AND subnum = 0";
 
 const UPDATE_COMMENT_QUERY: &str = "UPDATE `%%BOARD%%`
@@ -222,13 +226,21 @@ impl Handler<UpdateOp> for Database {
     type Result = ResponseFuture<(), my::errors::Error>;
 
     fn handle(&mut self, msg: UpdateOp, _ctx: &mut Self::Context) -> Self::Result {
-        let params = params! {
+        let mut params = params! {
             "num" => msg.1,
             "sticky" => msg.2.sticky,
-            "locked" => msg.2.closed && !msg.2.archived,
             "timestamp_expired" => msg.2.archived_on.map_or(0, |t| self.adjust_timestamp(t)),
         };
-        let update_op_query = UPDATE_OP_QUERY.replace(BOARD_REPLACE, &msg.0.to_string());
+
+        // Preserve the locked status of a thread by only updating it if it hasn't been archived yet
+        let update_op_query;
+        if msg.2.archived {
+            update_op_query = UPDATE_OP_NO_LOCK_QUERY.replace(BOARD_REPLACE, &msg.0.to_string());
+        } else {
+            update_op_query = UPDATE_OP_QUERY.replace(BOARD_REPLACE, &msg.0.to_string());
+            params.push((String::from("locked"), Value::from(msg.2.closed)));
+        }
+
         Box::new(
             self.pool
                 .get_conn()
