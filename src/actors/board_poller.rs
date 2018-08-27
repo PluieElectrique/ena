@@ -12,7 +12,6 @@ pub struct BoardPoller {
     board: Board,
     threads: Vec<Thread>,
     interval: u64,
-    deleted_page_threshold: u8,
     thread_updater: Addr<ThreadUpdater>,
     fetcher: Addr<Fetcher>,
 }
@@ -29,7 +28,6 @@ impl BoardPoller {
     pub fn new(
         board: Board,
         interval: u64,
-        deleted_page_threshold: u8,
         thread_updater: Addr<ThreadUpdater>,
         fetcher: Addr<Fetcher>,
     ) -> Self {
@@ -37,7 +35,6 @@ impl BoardPoller {
             board,
             threads: vec![],
             interval,
-            deleted_page_threshold,
             thread_updater,
             fetcher,
         }
@@ -54,7 +51,6 @@ impl BoardPoller {
             // is likely a deletion.
             let less_than_max =
                 curr_threads.len() < max_threads && self.threads.len() < max_threads;
-            let threshold = self.deleted_page_threshold;
             let last_no = curr_threads[curr_threads.len() - 1].no;
             let anchor_index = self
                 .threads
@@ -68,10 +64,7 @@ impl BoardPoller {
                     // If all of the threads have changed, then we probably loaded the thread list
                     // from the database, and can't assume that any of the old threads were deleted
                     updates.push(BumpedOff(thread.no));
-                } else if less_than_max
-                    || thread.bump_index < anchor_index.unwrap()
-                    || thread.page <= threshold
-                {
+                } else if less_than_max || thread.bump_index < anchor_index.unwrap() {
                     updates.push(Deleted(thread.no));
                 } else {
                     updates.push(BumpedOff(thread.no));

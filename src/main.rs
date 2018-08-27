@@ -52,13 +52,7 @@ fn main() {
             config.always_add_archive_times,
         ).start();
 
-        BoardPoller::new(
-            board,
-            config.poll_interval,
-            config.deleted_page_threshold,
-            thread_updater,
-            fetcher.clone(),
-        ).start();
+        BoardPoller::new(board, config.poll_interval, thread_updater, fetcher.clone()).start();
     }
 
     sys.run();

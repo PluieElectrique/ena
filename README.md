@@ -10,7 +10,7 @@ A 4chan scraper. Currently designed to be a (mostly) compatible replacement for 
 * Existing posts in modified threads are only updated when the OP data changes or when the length of a comment changes (simple heuristic to detect when "(USER WAS BANNED FOR THIS POST)" is added to a post)
 * Closed posts remain locked even after they are archived (In Asagi, closed posts are unlocked on the refetch after archival)
 * The old media/thumbs directory structure is not supported
-* A different bumped off/deleted algorithm
+* An improved bumped off/deleted algorithm
 * When possible, the `timestamp_expired` for a deleted thread or post is taken from the `Last-Modified` header of the request, and not the time at which the deleted thread or post was processed
 * PostgreSQL is currently not supported
 
