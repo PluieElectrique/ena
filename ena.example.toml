@@ -28,13 +28,12 @@ media_dir = "media"
 # Adjust timestamps to EST/EDT (should be `true` for compatibility)
 adjust_timestamps = true
 
-# On boards that have archiving, fetch a thread again after it has been archived. This allows for
-# more accurate archive times (how much more depends on `poll_interval`) and catches sage posts and
-# other changes which would have otherwise been missed, at the cost of an extra request. (should be
-# `true` for compatibility)
+# On archived boards, fetch a thread again after archival. This allows for more accurate archive
+# times (how much more depends on `poll_interval`) and catches sage posts/other updates which would
+# otherwise have been missed, at the cost of an extra request (should be `true` for compatibility)
 refetch_archived_threads = true
 
-# Add archive times to bumped-off threads on boards that don't have archiving. (should be `false`
+# Add archive times to bumped-off threads on boards that don't have archiving (should be `false`
 # for compatibility)
 always_add_archive_times = false
 
