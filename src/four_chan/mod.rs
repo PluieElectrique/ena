@@ -123,7 +123,7 @@ impl fmt::Display for Board {
 }
 
 impl Board {
-    pub fn max_threads(self) -> u8 {
+    pub fn max_threads(self) -> usize {
         match self {
             Board::f => 30,
             _ => 150,
