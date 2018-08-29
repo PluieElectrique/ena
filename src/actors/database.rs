@@ -78,23 +78,16 @@ impl Database {
             init_sql.push_str(&TRIGGER_SQL.replace(BOARD_REPLACE, &board.to_string()));
         }
 
-        let mut runtime = Runtime::new().unwrap();
         if create_index_counters {
-            runtime.block_on(
-                pool.get_conn()
-                    .and_then(|conn| conn.drop_query(init_sql))
-                    .and_then(|conn| conn.drop_query(INDEX_COUNTERS_SQL))
-                    // If we don't disconnect the runtime won't shutdown
-                    .and_then(|conn| conn.disconnect()),
-            )?;
-        } else {
-            runtime.block_on(
-                pool.get_conn()
-                    .and_then(|conn| conn.drop_query(init_sql))
-                    // If we don't disconnect the runtime won't shutdown
-                    .and_then(|conn| conn.disconnect()),
-            )?;
+            init_sql.push_str(INDEX_COUNTERS_SQL);
         }
+
+        let mut runtime = Runtime::new().unwrap();
+        runtime.block_on(
+            pool.get_conn()
+                .and_then(|conn| conn.drop_query(init_sql))
+                .and_then(|conn| conn.disconnect()),
+        )?;
         runtime.shutdown_on_idle().wait().unwrap();
 
         Ok(Self {
