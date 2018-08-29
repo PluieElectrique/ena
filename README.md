@@ -14,6 +14,10 @@ A 4chan scraper. Currently designed to be a (mostly) compatible replacement for 
 * When possible, the `timestamp_expired` for a deleted thread or post is taken from the `Last-Modified` header of the request, and not the time at which the deleted thread or post was processed
 * PostgreSQL is currently not supported
 
+## Logging
+
+Logging is configured by setting the `RUST_LOG` environment variable. For example, to turn on all logging, use `RUST_LOG=ena`. Or, to just show warnings and errors, use `RUST_LOG=ena=warn`. See the `env_logger` [documentation](https://docs.rs/env_logger/*/env_logger/#enabling-logging) for more information.
+
 ## Legal
 
 This program is licensed under the AGPLv3. See the `LICENSE` file for more information.
