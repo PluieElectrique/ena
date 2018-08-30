@@ -21,6 +21,7 @@ extern crate serde_derive;
 extern crate serde_json;
 extern crate tokio;
 extern crate toml;
+extern crate twox_hash;
 
 macro_rules! impl_enum_from {
     ($ext_type:ty, $enum:ident, $variant:ident) => {

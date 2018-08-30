@@ -1,9 +1,11 @@
 use std::collections::HashMap;
+use std::hash::Hasher;
 
 use actix::prelude::*;
 use chrono::prelude::*;
 use futures::future;
 use futures::prelude::*;
+use twox_hash::XxHash;
 
 use super::board_poller::{BoardUpdate, ThreadUpdate};
 use super::database::*;
@@ -145,7 +147,7 @@ impl ThreadUpdater {
                                 match (prev_iter.next(), curr_meta) {
                                     (Some(prev), Some((i, curr))) => {
                                         if prev.no == curr.no {
-                                            if prev.comment_len != curr.comment_len {
+                                            if prev.comment_hash != curr.comment_hash {
                                                 modified_posts.push((thread[i].no, thread[i].comment.take()));
                                             }
                                             curr_meta = curr_iter.next();
@@ -288,9 +290,8 @@ impl ThreadMetadata {
 /// Used to determine if a post was modified or not
 struct PostMetadata {
     no: u64,
-    /// Length of a comment before HTML cleaning. Used to detect if "(USER WAS BANNED FOR THIS
-    /// POST)" was added to the comment.
-    comment_len: usize,
+    /// Hash of a comment before HTML cleaning
+    comment_hash: Option<u64>,
     // The Asagi/FoolFuuka schema currently doesn't track this
     //file_deleted: bool,
 }
@@ -299,7 +300,11 @@ impl<'a> From<&'a Post> for PostMetadata {
     fn from(post: &Post) -> Self {
         Self {
             no: post.no,
-            comment_len: post.comment.as_ref().map_or(0, |c| c.len()),
+            comment_hash: post.comment.as_ref().map(|c| {
+                let mut hasher = XxHash::default();
+                hasher.write(c.as_bytes());
+                hasher.finish()
+            }),
             //file_deleted: post.image.as_ref().map_or(false, |i| i.file_deleted),
         }
     }

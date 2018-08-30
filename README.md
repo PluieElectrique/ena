@@ -7,7 +7,7 @@ A 4chan scraper. Currently designed to be a (mostly) compatible replacement for 
 * The `exif` column is not stored (JSON blob of exif data, unique IPs, `since4pass`, and troll countries)
 * Unknown HTML tags are stripped from the output instead of being ignored
 * Posts are trimmed of whitespace (may cause blankposts to become empty, non-NULL strings)
-* Existing posts in modified threads are only updated when the OP data changes or when the length of a comment changes (simple heuristic to detect when "(USER WAS BANNED FOR THIS POST)" is added to a post)
+* Existing posts in modified threads are only updated when the OP data or comment changes
 * Closed posts remain locked even after they are archived (In Asagi, closed posts are unlocked on the refetch after archival)
 * The old media/thumbs directory structure is not supported
 * An improved bumped off/deleted algorithm
