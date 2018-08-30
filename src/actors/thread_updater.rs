@@ -42,6 +42,10 @@ impl ThreadUpdater {
     }
 
     fn insert_posts(&mut self, posts: Vec<Post>) {
+        if posts.is_empty() {
+            return;
+        }
+
         let board = self.board;
         let fetcher = self.fetcher.clone();
         Arbiter::spawn(
@@ -170,11 +174,13 @@ impl ThreadUpdater {
                         );
 
                         act.insert_posts(new_posts);
-                        Arbiter::spawn(
-                            act.database.send(UpdateComment(act.board, modified_posts))
-                                .map_err(|err| error!("{}", err))
-                                .and_then(|res| res.map_err(|err| error!("{}", err)))
-                        );
+                        if !modified_posts.is_empty() {
+                            Arbiter::spawn(
+                                act.database.send(UpdateComment(act.board, modified_posts))
+                                    .map_err(|err| error!("{}", err))
+                                    .and_then(|res| res.map_err(|err| error!("{}", err)))
+                            );
+                        }
                         act.handle_removed(deleted_posts, last_modified);
                         act.thread_meta.insert(no, curr_meta);
                     }
@@ -197,19 +203,21 @@ impl ThreadUpdater {
     }
 
     fn handle_removed(&self, removed_posts: Vec<(u64, RemovedStatus)>, time: DateTime<Utc>) {
-        if !removed_posts.is_empty() {
-            let board = self.board;
-            Arbiter::spawn(
-                self.database
-                    .send(MarkPostsRemoved(self.board, removed_posts, time))
-                    .map_err(|err| error!("{}", err))
-                    .and_then(move |res| {
-                        res.map_err(|err| {
-                            error!("Failed to mark posts from /{}/ as removed: {}", board, err)
-                        })
-                    }),
-            );
+        if removed_posts.is_empty() {
+            return;
         }
+
+        let board = self.board;
+        Arbiter::spawn(
+            self.database
+                .send(MarkPostsRemoved(self.board, removed_posts, time))
+                .map_err(|err| error!("{}", err))
+                .and_then(move |res| {
+                    res.map_err(|err| {
+                        error!("Failed to mark posts from /{}/ as removed: {}", board, err)
+                    })
+                }),
+        );
     }
 }
 
