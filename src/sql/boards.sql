@@ -71,19 +71,6 @@ CREATE TABLE IF NOT EXISTS `%%BOARD%%_threads` (
   INDEX locked_index (`locked`)
 ) ENGINE=InnoDB CHARSET=%%CHARSET%%;
 
-CREATE TABLE IF NOT EXISTS `%%BOARD%%_users` (
-  `user_id` int unsigned NOT NULL auto_increment,
-  `name` varchar(100) NOT NULL DEFAULT '',
-  `trip` varchar(25) NOT NULL DEFAULT '',
-  `firstseen` int(11) NOT NULL,
-  `postcount` int(11) NOT NULL,
-
-  PRIMARY KEY (`user_id`),
-  UNIQUE name_trip_index (`name`, `trip`),
-  INDEX firstseen_index (`firstseen`),
-  INDEX postcount_index (`postcount`)
-) ENGINE=InnoDB DEFAULT CHARSET=%%CHARSET%%;
-
 CREATE TABLE IF NOT EXISTS `%%BOARD%%_images` (
   `media_id` int unsigned NOT NULL auto_increment,
   `media_hash` varchar(25) NOT NULL,
@@ -97,16 +84,4 @@ CREATE TABLE IF NOT EXISTS `%%BOARD%%_images` (
   UNIQUE media_hash_index (`media_hash`),
   INDEX total_index (`total`),
   INDEX banned_index (`banned`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8;
-
-CREATE TABLE IF NOT EXISTS `%%BOARD%%_daily` (
-  `day` int(10) unsigned NOT NULL,
-  `posts` int(10) unsigned NOT NULL,
-  `images` int(10) unsigned NOT NULL,
-  `sage` int(10) unsigned NOT NULL,
-  `anons` int(10) unsigned NOT NULL,
-  `trips` int(10) unsigned NOT NULL,
-  `names` int(10) unsigned NOT NULL,
-
-  PRIMARY KEY (`day`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
