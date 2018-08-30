@@ -10,6 +10,7 @@ use regex::Regex;
 use std::io::{self, Write};
 use std::str;
 
+use self::Color::*;
 use self::FourChanTag::*;
 
 lazy_static! {
@@ -71,6 +72,12 @@ enum TagType {
     End,
 }
 
+enum Color {
+    Red,
+    Green,
+    Blue,
+}
+
 enum FourChanTag {
     /// (USER WAS BANNED FOR THIS POST)
     Banned,
@@ -88,9 +95,11 @@ enum FourChanTag {
     Italic,
     /// Plain links, `<a class="quotelink">`, and `<span class="deadlink">`
     Link,
+    /// Colored text on /qst/
+    QstColor(Color),
     /// A tag which prints its text and children, but not its tags or attributes. This is used for
-    /// the root `<html>` element, the word break (`<wbr>`) tag, /qst/ colored text, and any other
-    /// unrecognized tag. It is also added to the stack when there is a missing parent.
+    /// the root `<html>` element, the word break (`<wbr>`) tag, and any other unrecognized tag. It
+    /// is also added to the stack when there is a missing parent.
     Quiet,
     /// `> implying`
     Quote,
@@ -110,7 +119,7 @@ impl FourChanTag {
     fn write<W: Write>(&self, w: &mut W, tag_type: &TagType) -> io::Result<()> {
         match self {
             // Tags that print nothing
-            Exif | Link | Quiet | Quote | ShiftJIS => return Ok(()),
+            Exif | Link | Quiet | Quote => return Ok(()),
             Break => match *tag_type {
                 TagType::Start => return w.write_all(b"\n"),
                 TagType::End => return Ok(()),
@@ -127,6 +136,8 @@ impl FourChanTag {
             Code => "code",
             Fortune(_) => "fortune",
             Italic => "i",
+            QstColor(_) => "qstcolor",
+            ShiftJIS => "shiftjis",
             Spoiler => "spoiler",
             Subscript => "sub",
             Superscript => "sup",
@@ -136,6 +147,15 @@ impl FourChanTag {
         w.write_all(name.as_bytes())?;
 
         if &TagType::Start == tag_type {
+            if let QstColor(color) = self {
+                let color = match color {
+                    Red => "red",
+                    Green => "green",
+                    Blue => "blue",
+                };
+                w.write_all(b"=")?;
+                w.write_all(color.as_bytes())?;
+            }
             if let Fortune(Some(color)) = self {
                 w.write_all(b" color=\"#")?;
                 w.write_all(color.as_bytes())?;
@@ -205,9 +225,9 @@ impl<W: Write> Serializer for HtmlSerializer<W> {
                 }
                 (local_name!("span"), "mu-s") => Bold,
                 (local_name!("span"), "mu-i") => Italic,
-                (local_name!("span"), "mu-r") => Quiet,
-                (local_name!("span"), "mu-b") => Quiet,
-                (local_name!("span"), "mu-g") => Quiet,
+                (local_name!("span"), "mu-r") => QstColor(Red),
+                (local_name!("span"), "mu-g") => QstColor(Green),
+                (local_name!("span"), "mu-b") => QstColor(Blue),
                 (local_name!("span"), "quote") => Quote,
                 (local_name!("span"), "sjis") => ShiftJIS,
                 _ => {
