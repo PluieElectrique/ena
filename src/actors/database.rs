@@ -49,8 +49,8 @@ const UPDATE_OP_NO_LOCK_QUERY: &str = "UPDATE `%%BOARD%%`
 SET sticky = :sticky, timestamp_expired = :timestamp_expired
 WHERE num = :num AND subnum = 0";
 
-const UPDATE_COMMENT_QUERY: &str = "UPDATE `%%BOARD%%`
-SET comment = :comment
+const UPDATE_POST_QUERY: &str = "UPDATE `%%BOARD%%`
+SET comment = :comment, spoiler = :spoiler
 WHERE num = :num AND subnum = 0";
 
 const MARK_REMOVED_QUERY: &str = "UPDATE `%%BOARD%%`
@@ -243,26 +243,27 @@ impl Handler<UpdateOp> for Database {
     }
 }
 
-pub struct UpdateComment(pub Board, pub Vec<(u64, Option<String>)>);
-impl Message for UpdateComment {
+pub struct UpdatePost(pub Board, pub Vec<(u64, Option<String>, Option<bool>)>);
+impl Message for UpdatePost {
     type Result = Result<(), my::errors::Error>;
 }
 
-impl Handler<UpdateComment> for Database {
+impl Handler<UpdatePost> for Database {
     type Result = ResponseFuture<(), my::errors::Error>;
 
-    fn handle(&mut self, msg: UpdateComment, _ctx: &mut Self::Context) -> Self::Result {
-        let params = msg.1.into_iter().map(move |(no, comment)| {
+    fn handle(&mut self, msg: UpdatePost, _ctx: &mut Self::Context) -> Self::Result {
+        let params = msg.1.into_iter().map(move |(no, comment, spoiler)| {
             params! {
                 "num" => no,
                 comment,
+                "spoiler" => spoiler.unwrap_or(false),
             }
         });
-        let update_comment_query = UPDATE_COMMENT_QUERY.replace(BOARD_REPLACE, &msg.0.to_string());
+        let update_post_query = UPDATE_POST_QUERY.replace(BOARD_REPLACE, &msg.0.to_string());
         Box::new(
             self.pool
                 .get_conn()
-                .and_then(|conn| conn.batch_exec(update_comment_query, params))
+                .and_then(|conn| conn.batch_exec(update_post_query, params))
                 .map(|_conn| ()),
         )
     }

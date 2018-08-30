@@ -147,8 +147,12 @@ impl ThreadUpdater {
                                 match (prev_iter.next(), curr_meta) {
                                     (Some(prev), Some((i, curr))) => {
                                         if prev.no == curr.no {
-                                            if prev.comment_hash != curr.comment_hash {
-                                                modified_posts.push((thread[i].no, thread[i].comment.take()));
+                                            if prev.metadata != curr.metadata {
+                                                modified_posts.push((
+                                                    thread[i].no,
+                                                    thread[i].comment.take(),
+                                                    thread[i].image.as_ref().map(|i| i.spoiler),
+                                                ));
                                             }
                                             curr_meta = curr_iter.next();
                                         } else {
@@ -178,7 +182,7 @@ impl ThreadUpdater {
                         act.insert_posts(new_posts);
                         if !modified_posts.is_empty() {
                             Arbiter::spawn(
-                                act.database.send(UpdateComment(act.board, modified_posts))
+                                act.database.send(UpdatePost(act.board, modified_posts))
                                     .map_err(|err| error!("{}", err))
                                     .and_then(|res| res.map_err(|err| error!("{}", err)))
                             );
@@ -290,19 +294,22 @@ impl ThreadMetadata {
 /// Used to determine if a post was modified or not
 struct PostMetadata {
     no: u64,
-    /// Hash of a comment before HTML cleaning
-    comment_hash: Option<u64>,
+    /// Hash of a comment before HTML cleaning and the image spoiler flag
+    metadata: (Option<u64>, Option<bool>),
 }
 
 impl<'a> From<&'a Post> for PostMetadata {
     fn from(post: &Post) -> Self {
+        let comment_hash = post.comment.as_ref().map(|c| {
+            let mut hasher = XxHash::default();
+            hasher.write(c.as_bytes());
+            hasher.finish()
+        });
+        let spoiler = post.image.as_ref().map(|i| i.spoiler);
+
         Self {
             no: post.no,
-            comment_hash: post.comment.as_ref().map(|c| {
-                let mut hasher = XxHash::default();
-                hasher.write(c.as_bytes());
-                hasher.finish()
-            }),
+            metadata: (comment_hash, spoiler),
         }
     }
 }
