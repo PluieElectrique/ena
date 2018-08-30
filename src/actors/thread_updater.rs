@@ -292,8 +292,6 @@ struct PostMetadata {
     no: u64,
     /// Hash of a comment before HTML cleaning
     comment_hash: Option<u64>,
-    // The Asagi/FoolFuuka schema currently doesn't track this
-    //file_deleted: bool,
 }
 
 impl<'a> From<&'a Post> for PostMetadata {
@@ -305,7 +303,6 @@ impl<'a> From<&'a Post> for PostMetadata {
                 hasher.write(c.as_bytes());
                 hasher.finish()
             }),
-            //file_deleted: post.image.as_ref().map_or(false, |i| i.file_deleted),
         }
     }
 }

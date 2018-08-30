@@ -87,11 +87,6 @@ pub struct PostImage {
     pub thumbnail_width: u8,
     #[serde(rename = "tn_h")]
     pub thumbnail_height: u8,
-    // The Asagi/FoolFuuka schema currently doesn't track this
-    //#[serde(rename = "filedeleted")]
-    //#[serde(deserialize_with = "num_to_bool")]
-    //#[serde(default)]
-    //pub file_deleted: bool,
     #[serde(deserialize_with = "num_to_bool")]
     #[serde(default)]
     pub spoiler: bool,
