@@ -1,7 +1,7 @@
 use std;
 use std::cmp;
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use actix::prelude::*;
@@ -40,12 +40,36 @@ impl Actor for Fetcher {
 }
 
 impl Fetcher {
-    pub fn new(fetch_delay: Duration, media_path: PathBuf) -> Result<Self, Error> {
-        if let Err(err) = std::fs::create_dir(&media_path) {
-            use std::io::ErrorKind;
-            match err.kind() {
-                ErrorKind::AlreadyExists => {}
-                _ => Err(err).context("Could not create media directory")?,
+    /// The list of boards is used to create the media directories ahead of time. No media files
+    /// from boards not in this list should be requested, as their directories may not exist and
+    /// will cause the downloads to fail.
+    pub fn new(
+        fetch_delay: Duration,
+        mut media_path: PathBuf,
+        boards: &[Board],
+    ) -> Result<Self, Error> {
+        {
+            let create_dir = |path: &Path| {
+                use std::io::ErrorKind;
+                match std::fs::create_dir(path) {
+                    Ok(()) => Ok(()),
+                    Err(err) => match err.kind() {
+                        ErrorKind::AlreadyExists => Ok(()),
+                        _ => Err(err).context("Could not create directory"),
+                    },
+                }
+            };
+
+            create_dir(media_path.as_ref())?;
+            for board in boards {
+                media_path.push(board.to_string());
+                create_dir(media_path.as_ref())?;
+                for dir in &["image, thumb, tmp"] {
+                    media_path.push(dir.to_string());
+                    create_dir(media_path.as_ref())?;
+                    media_path.pop();
+                }
+                media_path.pop();
             }
         }
 
@@ -327,11 +351,9 @@ impl Into<Uri> for FetchMedia {
 impl Handler<FetchMedia> for Fetcher {
     type Result = ();
     fn handle(&mut self, msg: FetchMedia, _ctx: &mut Self::Context) {
-        // TODO: Is it inefficient to recreate the directories each time?
         let mut temp_path = self.media_path.clone();
         temp_path.push(msg.0.to_string());
         temp_path.push("tmp");
-        std::fs::create_dir_all(&temp_path).unwrap();
         temp_path.push(msg.1.to_string());
 
         let mut real_path = self.media_path.clone();
@@ -351,11 +373,12 @@ impl Handler<FetchMedia> for Fetcher {
             .get_delay()
             .from_err()
             .and_then(|_| fetch.from_err())
-            .and_then(move |res| match res.status() {
-                StatusCode::OK => future::ok(res),
+            .join(tokio::fs::File::create(temp_path.clone()).from_err())
+            .and_then(move |(res, file)| match res.status() {
+                StatusCode::OK => future::ok((res, file)),
                 StatusCode::NOT_FOUND => future::err(FetchError::NotFound),
                 _ => future::err(res.status().into()),
-            }).join(tokio::fs::File::create(temp_path.clone()).from_err())
+            })
             .and_then(|(res, file)| {
                 res.into_body().from_err().fold(file, |file, chunk| {
                     tokio::io::write_all(file, chunk)
