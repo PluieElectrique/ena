@@ -26,7 +26,7 @@ const RFC_1123_FORMAT: &str = "%a, %d %b %Y %T GMT";
 
 pub struct Fetcher {
     client: Client<HttpsConnector<HttpConnector>>,
-    last_modified: HashMap<FetchKey, DateTime<Utc>>,
+    last_modified: HashMap<FetchThreads, DateTime<Utc>>,
     last_request: Instant,
     fetch_delay: Duration,
     media_path: PathBuf,
@@ -90,14 +90,13 @@ impl Fetcher {
         Delay::new(self.last_request)
     }
 
-    fn fetch_with_last_modified<K: Into<FetchKey>>(
+    fn fetch_with_last_modified(
         &mut self,
         uri: Uri,
-        key: K,
+        key: FetchThreads,
         ctx: &Context<Self>,
     ) -> impl Future<Item = (hyper::Chunk, DateTime<Utc>), Error = FetchError> {
         let mut request = hyper::Request::get(uri).body(Body::default()).unwrap();
-        let key = key.into();
         let myself = ctx.address();
 
         let last_modified = self
@@ -146,16 +145,6 @@ impl Fetcher {
     }
 }
 
-// We don't include a Thread variant because we don't need to look at the Last-Modified header.
-// threads.json already gives us last_modified.
-#[derive(Eq, Hash, PartialEq)]
-enum FetchKey {
-    Threads(FetchThreads),
-    Archive(FetchArchive),
-}
-impl_enum_from!(FetchThreads, FetchKey, Threads);
-impl_enum_from!(FetchArchive, FetchKey, Archive);
-
 // TODO: Use the Error/ErrorKind pattern if we need context
 #[derive(Debug, Fail)]
 pub enum FetchError {
@@ -192,7 +181,7 @@ impl_enum_from!(std::io::Error, FetchError, IoError);
 // We would like to return an ActorFuture from Fetcher, but we can't because ActorFutures can only
 // run on their own contexts. So, Fetcher must send a message to itself to update `last_modified`.
 #[derive(Message)]
-struct UpdateLastFetched(FetchKey, DateTime<Utc>);
+struct UpdateLastFetched(FetchThreads, DateTime<Utc>);
 
 impl Handler<UpdateLastFetched> for Fetcher {
     type Result = ();
@@ -229,25 +218,22 @@ impl Handler<FetchThread> for Fetcher {
                 .and_then(|_| fetch.from_err())
                 .and_then(move |res| match res.status() {
                     StatusCode::OK => future::ok(res),
-                    StatusCode::NOT_MODIFIED => {
-                        warn!("304 Not Modified on thread fetch. Is last_modified in threads.json being checked?");
-                        future::err(FetchError::NotModified)
-                    }
                     StatusCode::NOT_FOUND => future::err(FetchError::NotFound),
                     _ => future::err(res.status().into()),
-                })
-                .and_then(|res| {
+                }).and_then(|res| {
                     let last_modified = res
                         .headers()
                         .get(header::LAST_MODIFIED)
                         .map(|last| {
-                            Utc.datetime_from_str(last.to_str().unwrap(), RFC_1123_FORMAT).unwrap()
+                            Utc.datetime_from_str(last.to_str().unwrap(), RFC_1123_FORMAT)
+                                .unwrap()
                         }).unwrap_or_else(Utc::now);
 
-                    res.into_body().concat2().from_err()
+                    res.into_body()
+                        .concat2()
+                        .from_err()
                         .join(future::ok(last_modified))
-                })
-                .and_then(move |(body, last_modified)| {
+                }).and_then(move |(body, last_modified)| {
                     let PostsWrapper { posts } = serde_json::from_slice(&body)?;
                     if posts.is_empty() {
                         Err(FetchError::Empty)
@@ -302,7 +288,7 @@ impl Handler<FetchThreads> for Fetcher {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[derive(Debug)]
 pub struct FetchArchive(pub Board);
 impl Message for FetchArchive {
     type Result = Result<Vec<u64>, FetchError>;
@@ -320,18 +306,25 @@ impl Into<Uri> for FetchArchive {
 
 impl Handler<FetchArchive> for Fetcher {
     type Result = ResponseFuture<Vec<u64>, FetchError>;
-    fn handle(&mut self, msg: FetchArchive, ctx: &mut Self::Context) -> Self::Result {
-        let fetch = self.fetch_with_last_modified(msg.into(), msg, ctx);
-        Box::new(self.get_delay().from_err().and_then(|_| fetch).and_then(
-            move |(body, _last_modified)| {
-                let archive: Vec<u64> = serde_json::from_slice(&body)?;
-                if archive.is_empty() {
-                    Err(FetchError::Empty)
-                } else {
-                    Ok(archive)
-                }
-            },
-        ))
+    fn handle(&mut self, msg: FetchArchive, _ctx: &mut Self::Context) -> Self::Result {
+        let fetch = self.client.get(msg.into());
+        Box::new(
+            self.get_delay()
+                .from_err()
+                .and_then(|_| fetch.from_err())
+                .and_then(move |res| match res.status() {
+                    StatusCode::OK => future::ok(res),
+                    _ => future::err(res.status().into()),
+                }).and_then(|res| res.into_body().concat2().from_err())
+                .and_then(move |body| {
+                    let archive: Vec<u64> = serde_json::from_slice(&body)?;
+                    if archive.is_empty() {
+                        Err(FetchError::Empty)
+                    } else {
+                        Ok(archive)
+                    }
+                }),
+        )
     }
 }
 
