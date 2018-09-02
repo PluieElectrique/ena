@@ -8,6 +8,8 @@ use super::ThreadUpdater;
 use four_chan::fetcher::{FetchError, FetchThreads, Fetcher};
 use four_chan::{Board, Thread};
 
+/// An actor which watches a board's threads and sends updates to a
+/// [`ThreadUpdater`](struct.ThreadUpdater.html)
 pub struct BoardPoller {
     board: Board,
     threads: Vec<Thread>,
