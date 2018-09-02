@@ -9,7 +9,7 @@ use twox_hash::XxHash;
 
 use super::board_poller::{BoardUpdate, ThreadUpdate};
 use super::database::*;
-use four_chan::fetcher::*;
+use super::fetcher::*;
 use four_chan::{self, Board, Post};
 
 pub struct ThreadUpdater {

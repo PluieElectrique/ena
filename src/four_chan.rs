@@ -4,12 +4,13 @@ use std::fmt;
 
 use serde::{Deserialize, Deserializer};
 
-pub mod fetcher;
+pub const API_URI_PREFIX: &str = "https://a.4cdn.org";
+pub const IMG_URI_PREFIX: &str = "https://i.4cdn.org";
 
 #[derive(Deserialize)]
-struct ThreadPage {
-    page: u8,
-    threads: Vec<Thread>,
+pub struct ThreadPage {
+    pub page: u8,
+    pub threads: Vec<Thread>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -23,8 +24,8 @@ pub struct Thread {
 }
 
 #[derive(Deserialize)]
-struct PostsWrapper {
-    posts: Vec<Post>,
+pub struct PostsWrapper {
+    pub posts: Vec<Post>,
 }
 
 // Some fields aren't used, and thus are omitted.

@@ -4,8 +4,8 @@ use actix::prelude::*;
 use chrono::prelude::*;
 use futures::prelude::*;
 
+use super::fetcher::{FetchError, FetchThreads, Fetcher};
 use super::ThreadUpdater;
-use four_chan::fetcher::{FetchError, FetchThreads, Fetcher};
 use four_chan::{Board, Thread};
 
 /// An actor which watches a board's threads and sends updates to a

@@ -18,10 +18,8 @@ use tokio;
 use tokio::runtime::Runtime;
 use tokio::timer::Delay;
 
-use super::*;
+use four_chan::*;
 
-const API_URI_PREFIX: &str = "https://a.4cdn.org";
-const IMG_URI_PREFIX: &str = "https://i.4cdn.org";
 const RFC_1123_FORMAT: &str = "%a, %d %b %Y %T GMT";
 
 pub struct Fetcher {

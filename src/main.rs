@@ -14,8 +14,6 @@ use actix::prelude::*;
 use ena::actors::*;
 use ena::*;
 
-use four_chan::fetcher::Fetcher;
-
 fn main() {
     pretty_env_logger::init();
 
