@@ -20,6 +20,8 @@ use tokio::timer::Delay;
 
 use four_chan::*;
 
+mod rate_limiter;
+
 const RFC_1123_FORMAT: &str = "%a, %d %b %Y %T GMT";
 
 pub struct Fetcher {

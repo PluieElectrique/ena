@@ -3,6 +3,7 @@ extern crate chrono;
 extern crate chrono_tz;
 #[macro_use]
 extern crate failure;
+#[macro_use]
 extern crate futures;
 #[macro_use]
 extern crate html5ever;

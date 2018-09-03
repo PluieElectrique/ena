@@ -11,6 +11,11 @@ Asagi Imageboard Archiver
 Copyright (c) 2012 Eksopl
 Released under the GNU General Public License, version 3, or later.
 
+futures-rs
+Copyright (c) 2016 Alex Crichton
+Copyright (c) 2017 The Tokio Authors
+Licensed under the MIT License.
+
 html5ever
 Copyright (c) 2014-2017 The html5ever Project Developers
 Licensed under the MIT License.
