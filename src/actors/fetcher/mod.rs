@@ -48,29 +48,27 @@ impl Fetcher {
         mut media_path: PathBuf,
         boards: &[Board],
     ) -> Result<Self, Error> {
-        {
-            let create_dir = |path: &Path| {
-                use std::io::ErrorKind;
-                match std::fs::create_dir(path) {
-                    Ok(()) => Ok(()),
-                    Err(err) => match err.kind() {
-                        ErrorKind::AlreadyExists => Ok(()),
-                        _ => Err(err).context("Could not create directory"),
-                    },
-                }
-            };
+        let create_dir = |path: &Path| {
+            use std::io::ErrorKind;
+            match std::fs::create_dir(path) {
+                Ok(()) => Ok(()),
+                Err(err) => match err.kind() {
+                    ErrorKind::AlreadyExists => Ok(()),
+                    _ => Err(err).context("Could not create directory"),
+                },
+            }
+        };
 
+        create_dir(media_path.as_ref())?;
+        for board in boards {
+            media_path.push(board.to_string());
             create_dir(media_path.as_ref())?;
-            for board in boards {
-                media_path.push(board.to_string());
+            for dir in &["image", "thumb", "tmp"] {
+                media_path.push(dir.to_string());
                 create_dir(media_path.as_ref())?;
-                for dir in &["image, thumb, tmp"] {
-                    media_path.push(dir.to_string());
-                    create_dir(media_path.as_ref())?;
-                    media_path.pop();
-                }
                 media_path.pop();
             }
+            media_path.pop();
         }
 
         let https = HttpsConnector::new(2).context("Could not create HttpsConnector")?;
