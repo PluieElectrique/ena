@@ -139,7 +139,7 @@ impl BoardPoller {
     }
 
     fn poll(&self, interval: u64, ctx: &mut Context<Self>) {
-        ctx.run_later(Duration::new(interval, 0), |act, ctx| {
+        ctx.run_later(Duration::from_secs(interval), |act, ctx| {
             ctx.spawn(
                 act.fetcher
                     .send(FetchThreads(act.board))
