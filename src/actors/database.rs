@@ -39,7 +39,8 @@ INNER JOIN `%%BOARD%%_images` ON
     AND preview_orig in (preview_reply, preview_op)
 WHERE doc_id BETWEEN
     LAST_INSERT_ID()
-    AND LAST_INSERT_ID() + ROW_COUNT() - 1;";
+    AND LAST_INSERT_ID() + ROW_COUNT() - 1
+    AND banned = 0;";
 
 const UPDATE_OP_QUERY: &str = "UPDATE `%%BOARD%%`
 SET sticky = :sticky, locked = :locked, timestamp_expired = :timestamp_expired
