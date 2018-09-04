@@ -1,14 +1,14 @@
 use std;
-use std::cmp;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::time::{Duration, Instant};
 
+use actix::dev::{MessageResponse, ResponseChannel};
 use actix::prelude::*;
 use chrono::prelude::*;
 use failure::{Error, ResultExt};
 use futures::future;
 use futures::prelude::*;
+use futures::sync::mpsc::{self, Sender};
 use hyper::client::{Client, HttpConnector};
 use hyper::header::{self, HeaderValue};
 use hyper::{self, Body, StatusCode, Uri};
@@ -16,20 +16,21 @@ use hyper_tls::HttpsConnector;
 use serde_json;
 use tokio;
 use tokio::runtime::Runtime;
-use tokio::timer::Delay;
-
-use four_chan::*;
 
 mod rate_limiter;
+
+use self::rate_limiter::{Consume, RateLimiter};
+use four_chan::*;
+use RateLimitingConfig;
 
 const RFC_1123_FORMAT: &str = "%a, %d %b %Y %T GMT";
 
 pub struct Fetcher {
     client: Client<HttpsConnector<HttpConnector>>,
     last_modified: HashMap<FetchThreads, DateTime<Utc>>,
-    last_request: Instant,
-    fetch_delay: Duration,
     media_path: PathBuf,
+    media_rl_sender: Sender<Box<Future<Item = (), Error = ()> + Send>>,
+    thread_rl_sender: Sender<Box<Future<Item = (), Error = ()>>>,
     // Fetcher must use its own runtime because tokio::fs functions can't use the current_thread
     // runtime that Actix provides
     runtime: Runtime,
@@ -37,6 +38,10 @@ pub struct Fetcher {
 
 impl Actor for Fetcher {
     type Context = Context<Self>;
+
+    fn started(&mut self, ctx: &mut Self::Context) {
+        ctx.set_mailbox_capacity(200);
+    }
 }
 
 impl Fetcher {
@@ -44,9 +49,10 @@ impl Fetcher {
     /// from boards not in this list should be requested, as their directories may not exist and
     /// will cause the downloads to fail.
     pub fn new(
-        fetch_delay: Duration,
-        mut media_path: PathBuf,
         boards: &[Board],
+        mut media_path: PathBuf,
+        media_rl_config: &RateLimitingConfig,
+        thread_rl_config: &RateLimitingConfig,
     ) -> Result<Self, Error> {
         let create_dir = |path: &Path| {
             use std::io::ErrorKind;
@@ -71,21 +77,34 @@ impl Fetcher {
             media_path.pop();
         }
 
+        let mut runtime = Runtime::new().unwrap();
         let https = HttpsConnector::new(2).context("Could not create HttpsConnector")?;
         let client = Client::builder().build::<_, Body>(https);
+
+        let (media_rl_sender, receiver) = mpsc::channel(150);
+        runtime.spawn(Consume::new(RateLimiter::new(receiver, media_rl_config)));
+
+        let (thread_rl_sender, receiver) = mpsc::channel(150);
+        Arbiter::spawn(Consume::new(RateLimiter::new(receiver, thread_rl_config)));
+
         Ok(Self {
             client,
             last_modified: HashMap::new(),
-            last_request: Instant::now() - fetch_delay,
-            fetch_delay,
             media_path,
-            runtime: Runtime::new().unwrap(),
+            media_rl_sender,
+            thread_rl_sender,
+            runtime,
         })
     }
 
-    fn get_delay(&mut self) -> Delay {
-        self.last_request = cmp::max(Instant::now(), self.last_request + self.fetch_delay);
-        Delay::new(self.last_request)
+    fn new_rl_thread_response<I, E>(
+        &self,
+        future: Box<Future<Item = I, Error = E>>,
+    ) -> RateLimitedResponse<I, E> {
+        RateLimitedResponse {
+            sender: self.thread_rl_sender.clone(),
+            future,
+        }
     }
 
     fn fetch_with_last_modified(
@@ -140,6 +159,30 @@ impl Fetcher {
                     .then(|_| res.into_body().concat2().from_err())
                     .map(move |body| (body, last_modified))
             })
+    }
+}
+
+pub struct RateLimitedResponse<I, E> {
+    sender: Sender<Box<Future<Item = (), Error = ()>>>,
+    future: Box<Future<Item = I, Error = E>>,
+}
+
+impl<A, M, I: 'static, E: 'static> MessageResponse<A, M> for RateLimitedResponse<I, E>
+where
+    A: Actor,
+    M: Message<Result = Result<I, E>>,
+{
+    fn handle<R: ResponseChannel<M>>(self, _: &mut A::Context, tx: Option<R>) {
+        Arbiter::spawn(
+            self.sender
+                .send(Box::new(self.future.then(move |res| {
+                    if let Some(tx) = tx {
+                        tx.send(res);
+                    }
+                    Ok(())
+                }))).map(|_| ())
+                .map_err(|err| error!("Failed to send RateLimitedResponse future: {}", err)),
+        )
     }
 }
 
@@ -206,14 +249,13 @@ impl Into<Uri> for FetchThread {
 }
 
 impl Handler<FetchThread> for Fetcher {
-    type Result = ResponseFuture<(Vec<Post>, DateTime<Utc>), FetchError>;
+    type Result = RateLimitedResponse<(Vec<Post>, DateTime<Utc>), FetchError>;
 
     fn handle(&mut self, msg: FetchThread, _ctx: &mut Self::Context) -> Self::Result {
-        let fetch = self.client.get(msg.into());
-        Box::new(
-            self.get_delay()
+        let future = Box::new(
+            self.client
+                .get(msg.into())
                 .from_err()
-                .and_then(|_| fetch.from_err())
                 .and_then(move |res| match res.status() {
                     StatusCode::OK => future::ok(res),
                     StatusCode::NOT_FOUND => future::err(FetchError::NotFound),
@@ -239,7 +281,8 @@ impl Handler<FetchThread> for Fetcher {
                         Ok((posts, last_modified))
                     }
                 }),
-        )
+        );
+        self.new_rl_thread_response(future)
     }
 }
 
@@ -260,29 +303,31 @@ impl Into<Uri> for FetchThreads {
 }
 
 impl Handler<FetchThreads> for Fetcher {
-    type Result = ResponseFuture<(Vec<Thread>, DateTime<Utc>), FetchError>;
+    type Result = RateLimitedResponse<(Vec<Thread>, DateTime<Utc>), FetchError>;
     fn handle(&mut self, msg: FetchThreads, ctx: &mut Self::Context) -> Self::Result {
-        let fetch = self.fetch_with_last_modified(msg.into(), msg, ctx);
-        Box::new(self.get_delay().from_err().and_then(|_| fetch).and_then(
-            move |(body, last_modified)| {
-                let threads: Vec<ThreadPage> = serde_json::from_slice(&body)?;
-                let mut threads = threads.into_iter().fold(vec![], |mut acc, mut page| {
-                    for thread in &mut page.threads {
-                        thread.page = page.page;
+        let future = Box::new(
+            self.fetch_with_last_modified(msg.into(), msg, ctx)
+                .from_err()
+                .and_then(move |(body, last_modified)| {
+                    let threads: Vec<ThreadPage> = serde_json::from_slice(&body)?;
+                    let mut threads = threads.into_iter().fold(vec![], |mut acc, mut page| {
+                        for thread in &mut page.threads {
+                            thread.page = page.page;
+                        }
+                        acc.append(&mut page.threads);
+                        acc
+                    });
+                    for (i, thread) in threads.iter_mut().enumerate() {
+                        thread.bump_index = i as u8;
                     }
-                    acc.append(&mut page.threads);
-                    acc
-                });
-                for (i, thread) in threads.iter_mut().enumerate() {
-                    thread.bump_index = i as u8;
-                }
-                if threads.is_empty() {
-                    Err(FetchError::Empty)
-                } else {
-                    Ok((threads, last_modified))
-                }
-            },
-        ))
+                    if threads.is_empty() {
+                        Err(FetchError::Empty)
+                    } else {
+                        Ok((threads, last_modified))
+                    }
+                }),
+        );
+        self.new_rl_thread_response(future)
     }
 }
 
@@ -303,13 +348,12 @@ impl Into<Uri> for FetchArchive {
 }
 
 impl Handler<FetchArchive> for Fetcher {
-    type Result = ResponseFuture<Vec<u64>, FetchError>;
+    type Result = RateLimitedResponse<Vec<u64>, FetchError>;
     fn handle(&mut self, msg: FetchArchive, _ctx: &mut Self::Context) -> Self::Result {
-        let fetch = self.client.get(msg.into());
-        Box::new(
-            self.get_delay()
+        let future = Box::new(
+            self.client
+                .get(msg.into())
                 .from_err()
-                .and_then(|_| fetch.from_err())
                 .and_then(move |res| match res.status() {
                     StatusCode::OK => future::ok(res),
                     _ => future::err(res.status().into()),
@@ -322,7 +366,8 @@ impl Handler<FetchArchive> for Fetcher {
                         Ok(archive)
                     }
                 }),
-        )
+        );
+        self.new_rl_thread_response(future)
     }
 }
 
@@ -359,11 +404,8 @@ impl Handler<FetchMedia> for Fetcher {
         std::fs::create_dir_all(&real_path).unwrap();
         real_path.push(msg.1.to_string());
 
-        let fetch = self.client.get(msg.into());
-        let future = self
-            .get_delay()
+        let future = self.client.get(msg.into())
             .from_err()
-            .and_then(|_| fetch.from_err())
             .join(tokio::fs::File::create(temp_path.clone()).from_err())
             .and_then(move |(res, file)| match res.status() {
                 StatusCode::OK => future::ok((res, file)),
@@ -383,6 +425,12 @@ impl Handler<FetchMedia> for Fetcher {
             // TODO: Retry request
             .map_err(|err| log_error!(&err));
 
-        self.runtime.spawn(future);
+        self.runtime.spawn(
+            self.media_rl_sender
+                .clone()
+                .send(Box::new(future))
+                .map(|_| ())
+                .map_err(|err| error!("{}", err)),
+        );
     }
 }

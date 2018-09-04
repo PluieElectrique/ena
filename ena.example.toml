@@ -6,8 +6,12 @@ boards = [""]
 # Seconds to wait between fetching the threads.json of each board
 poll_interval = 30
 
-# Milliseconds of delay between simultaneous requests
-fetch_delay = 1_000
+# `interval` is in seconds.
+# `max_interval` is the maximum number of requests that can be made in an interval.
+# `max_concurrent` is the maximum number of requests that can run at once.
+media_rate_limiting = { interval = 60, max_interval = 300, max_concurrent = 50 }
+# This includes requests for threads, threads.json, and archive.json
+thread_rate_limiting = { interval = 60, max_interval = 180, max_concurrent = 25 }
 
 
 ## Database/media settings

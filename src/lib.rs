@@ -74,7 +74,8 @@ use failure::{Error, ResultExt};
 pub struct Config {
     pub boards: Vec<four_chan::Board>,
     pub poll_interval: u64,
-    pub fetch_delay: u64,
+    pub media_rate_limiting: RateLimitingConfig,
+    pub thread_rate_limiting: RateLimitingConfig,
     pub database_url: String,
     pub charset: String,
     pub media_path: PathBuf,
@@ -82,6 +83,13 @@ pub struct Config {
     pub refetch_archived_threads: bool,
     pub always_add_archive_times: bool,
     pub create_index_counters: bool,
+}
+
+#[derive(Deserialize)]
+pub struct RateLimitingConfig {
+    pub interval: u64,
+    pub max_interval: usize,
+    pub max_concurrent: usize,
 }
 
 #[derive(Debug, Fail)]
@@ -107,9 +115,6 @@ pub fn parse_config() -> Result<Config, Error> {
         warn!("A very short `poll_interval` may cause the API to return old data");
     } else if toml.poll_interval > 1800 {
         warn!("A `poll_interval` of more than 30min may result in lost data");
-    }
-    if toml.fetch_delay < 1_000 {
-        warn!("A `fetch_delay` of less than 1s can lead to rate limiting");
     }
 
     Ok(toml)

@@ -8,7 +8,6 @@ extern crate mysql_async as my;
 extern crate pretty_env_logger;
 
 use std::process;
-use std::time::Duration;
 
 use actix::prelude::*;
 use ena::actors::*;
@@ -36,9 +35,10 @@ fn main() {
     }).start();
 
     let fetcher = Fetcher::new(
-        Duration::from_millis(config.fetch_delay),
-        config.media_path,
         &config.boards,
+        config.media_path,
+        &config.media_rate_limiting,
+        &config.thread_rate_limiting,
     ).unwrap_or_else(|err| {
         log_error!(err.as_fail());
         process::exit(1);
