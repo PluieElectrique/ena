@@ -106,16 +106,19 @@ pub fn parse_config() -> Result<Config, Error> {
         .read_to_string(&mut contents)
         .context("Could not read ena.toml")?;
 
-    let toml: Config = toml::from_str(&contents).context("Could not parse ena.toml")?;
+    let mut config: Config = toml::from_str(&contents).context("Could not parse ena.toml")?;
 
-    if toml.poll_interval == 0 {
+    config.boards.sort();
+    config.boards.dedup();
+
+    if config.poll_interval == 0 {
         return Err(ConfigError::ZeroPollInterval.into());
-    } else if toml.poll_interval < 10 {
+    } else if config.poll_interval < 10 {
         warn!("4chan API rules recommend a minimum `poll_interval` of 10 seconds");
         warn!("A very short `poll_interval` may cause the API to return old data");
-    } else if toml.poll_interval > 1800 {
+    } else if config.poll_interval > 1800 {
         warn!("A `poll_interval` of more than 30min may result in lost data");
     }
 
-    Ok(toml)
+    Ok(config)
 }

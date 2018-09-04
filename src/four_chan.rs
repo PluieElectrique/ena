@@ -135,7 +135,7 @@ impl Board {
 }
 
 #[allow(non_camel_case_types)]
-#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum Board {
     _3,
     a,
