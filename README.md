@@ -2,7 +2,23 @@
 
 A 4chan scraper. Currently designed to be a (mostly) compatible replacement for Asagi.
 
+## Getting Started
+
+Install and configure a MySQL-compatible database (tested on MariaDB 10.1). If you are running Ena with FoolFuuka, consider referring to the [instructions](https://wiki.bibanon.org/FoolFuuka) at the Bibliotheca Anonoma wiki.
+
+Copy the default configuration file `ena.example.toml` to `ena.toml` and adjust the settings as necessary. Then, [install Rust](https://www.rust-lang.org/install.html) and compile and run Ena with:
+
+```sh
+cargo run --release
+```
+
+## Logging
+
+By default, only errors are logged. Logging is configured by setting the `RUST_LOG` environment variable. For example, to turn on all logging, use `RUST_LOG=ena`. Or, to just show warnings and errors, use `RUST_LOG=ena=warn`. See the `env_logger` [documentation](https://docs.rs/env_logger/*/env_logger/) for more information.
+
 ## Differences from Asagi
+
+[desuarchive's fork](https://github.com/desuarchive/asagi) is used as the reference for these comparisons.
 
 ### Scraping Mechanics
 
@@ -24,11 +40,6 @@ A 4chan scraper. Currently designed to be a (mostly) compatible replacement for 
 
 * PostgreSQL is not supported
 * The `%%BOARD%%_daily` and `%%BOARD%%_users` tables are not created
-
-
-## Logging
-
-Logging is configured by setting the `RUST_LOG` environment variable. For example, to turn on all logging, use `RUST_LOG=ena`. Or, to just show warnings and errors, use `RUST_LOG=ena=warn`. See the `env_logger` [documentation](https://docs.rs/env_logger/*/env_logger/#enabling-logging) for more information.
 
 ## Legal
 
