@@ -27,7 +27,7 @@ const RFC_1123_FORMAT: &str = "%a, %d %b %Y %T GMT";
 
 pub struct Fetcher {
     client: Client<HttpsConnector<HttpConnector>>,
-    last_modified: HashMap<FetchThreads, DateTime<Utc>>,
+    last_modified: HashMap<FetchKey, DateTime<Utc>>,
     media_path: PathBuf,
     media_rl_sender: Sender<Box<Future<Item = (), Error = ()> + Send>>,
     thread_rl_sender: Sender<Box<Future<Item = (), Error = ()>>>,
@@ -80,13 +80,14 @@ impl Fetcher {
         }
     }
 
-    fn fetch_with_last_modified(
+    fn fetch_with_last_modified<K: Into<FetchKey>>(
         &mut self,
         uri: Uri,
-        key: FetchThreads,
+        key: K,
         ctx: &Context<Self>,
     ) -> impl Future<Item = (hyper::Chunk, DateTime<Utc>), Error = FetchError> {
         let mut request = hyper::Request::get(uri).body(Body::default()).unwrap();
+        let key = key.into();
         let myself = ctx.address();
 
         let last_modified = self
@@ -112,6 +113,7 @@ impl Fetcher {
                     }).unwrap_or_else(Utc::now);
 
                 match res.status() {
+                    StatusCode::NOT_FOUND => future::err(FetchError::NotFound),
                     StatusCode::NOT_MODIFIED => future::err(FetchError::NotModified),
                     StatusCode::OK => {
                         if last_modified > new_modified {
@@ -159,6 +161,14 @@ where
     }
 }
 
+#[derive(Eq, Hash, PartialEq)]
+enum FetchKey {
+    Thread(FetchThread),
+    Threads(FetchThreads),
+}
+impl_enum_from!(FetchThread, FetchKey, Thread);
+impl_enum_from!(FetchThreads, FetchKey, Threads);
+
 // TODO: Use the Error/ErrorKind pattern if we need context
 #[derive(Debug, Fail)]
 pub enum FetchError {
@@ -195,19 +205,23 @@ impl_enum_from!(std::io::Error, FetchError, IoError);
 // We would like to return an ActorFuture from Fetcher, but we can't because ActorFutures can only
 // run on their own contexts. So, Fetcher must send a message to itself to update `last_modified`.
 #[derive(Message)]
-struct UpdateLastModified(FetchThreads, DateTime<Utc>);
+struct UpdateLastModified(FetchKey, DateTime<Utc>);
 
 impl Handler<UpdateLastModified> for Fetcher {
     type Result = ();
 
     fn handle(&mut self, msg: UpdateLastModified, _ctx: &mut Self::Context) {
-        if self.last_modified.get(&msg.0).map_or(true, |&dt| dt < msg.1) {
+        if self
+            .last_modified
+            .get(&msg.0)
+            .map_or(true, |&dt| dt < msg.1)
+        {
             self.last_modified.insert(msg.0, msg.1);
         }
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct FetchThread(pub Board, pub u64);
 impl Message for FetchThread {
     type Result = Result<(Vec<Post>, DateTime<Utc>), FetchError>;
@@ -226,29 +240,11 @@ impl Into<Uri> for FetchThread {
 impl Handler<FetchThread> for Fetcher {
     type Result = RateLimitedResponse<(Vec<Post>, DateTime<Utc>), FetchError>;
 
-    fn handle(&mut self, msg: FetchThread, _ctx: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, msg: FetchThread, ctx: &mut Self::Context) -> Self::Result {
         let future = Box::new(
-            self.client
-                .get(msg.into())
+            self.fetch_with_last_modified(msg.into(), msg, ctx)
                 .from_err()
-                .and_then(move |res| match res.status() {
-                    StatusCode::OK => future::ok(res),
-                    StatusCode::NOT_FOUND => future::err(FetchError::NotFound),
-                    _ => future::err(res.status().into()),
-                }).and_then(|res| {
-                    let last_modified = res
-                        .headers()
-                        .get(header::LAST_MODIFIED)
-                        .map(|last| {
-                            Utc.datetime_from_str(last.to_str().unwrap(), RFC_1123_FORMAT)
-                                .unwrap()
-                        }).unwrap_or_else(Utc::now);
-
-                    res.into_body()
-                        .concat2()
-                        .from_err()
-                        .join(future::ok(last_modified))
-                }).and_then(move |(body, last_modified)| {
+                .and_then(move |(body, last_modified)| {
                     let PostsWrapper { posts } = serde_json::from_slice(&body)?;
                     if posts.is_empty() {
                         Err(FetchError::Empty)
