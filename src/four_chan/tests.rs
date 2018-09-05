@@ -7,7 +7,6 @@ use futures::prelude::*;
 use hyper::client::Client;
 use hyper::Body;
 use hyper_tls::HttpsConnector;
-use regex::Regex;
 use serde_json;
 use tokio::runtime::Runtime;
 
@@ -42,11 +41,7 @@ fn boards_json() {
             .from_err()
             .and_then(|res| res.into_body().concat2().from_err())
             .and_then(|body| {
-                // Quick and dirty way to avoid having to write a custom deserializer
-                let body = Regex::new(r#""board":"3""#)
-                    .unwrap()
-                    .replace(str::from_utf8(&body)?, r#""board":"_3""#);
-                let BoardsWrapper { boards } = serde_json::from_str(&body)?;
+                let BoardsWrapper { boards } = serde_json::from_slice(&body)?;
                 Ok(boards)
             }),
     );

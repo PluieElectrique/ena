@@ -140,6 +140,7 @@ impl Board {
 #[allow(non_camel_case_types)]
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum Board {
+    #[serde(rename = "3")]
     _3,
     a,
     aco,

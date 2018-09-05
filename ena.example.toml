@@ -1,6 +1,6 @@
 ## Scraping settings
 
-# List of boards to scrape (note: 3 must be written as "_3")
+# List of boards to scrape
 boards = [""]
 
 # Seconds to wait between fetching the threads.json of each board
