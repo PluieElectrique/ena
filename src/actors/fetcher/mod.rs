@@ -221,14 +221,14 @@ impl Handler<UpdateLastModified> for Fetcher {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[derive(Debug, Eq, Hash, PartialEq)]
 pub struct FetchThread(pub Board, pub u64);
 impl Message for FetchThread {
     type Result = Result<(Vec<Post>, DateTime<Utc>), FetchError>;
 }
 
-impl Into<Uri> for FetchThread {
-    fn into(self) -> Uri {
+impl FetchThread {
+    fn into_uri(&self) -> Uri {
         format!("{}/{}/thread/{}.json", API_URI_PREFIX, self.0, self.1)
             .parse()
             .unwrap_or_else(|err| {
@@ -242,7 +242,7 @@ impl Handler<FetchThread> for Fetcher {
 
     fn handle(&mut self, msg: FetchThread, ctx: &mut Self::Context) -> Self::Result {
         let future = Box::new(
-            self.fetch_with_last_modified(msg.into(), msg, ctx)
+            self.fetch_with_last_modified(msg.into_uri(), msg, ctx)
                 .from_err()
                 .and_then(move |(body, last_modified)| {
                     let PostsWrapper { posts } = serde_json::from_slice(&body)?;
@@ -257,14 +257,14 @@ impl Handler<FetchThread> for Fetcher {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[derive(Debug, Eq, Hash, PartialEq)]
 pub struct FetchThreads(pub Board);
 impl Message for FetchThreads {
     type Result = Result<(Vec<Thread>, DateTime<Utc>), FetchError>;
 }
 
-impl Into<Uri> for FetchThreads {
-    fn into(self) -> Uri {
+impl FetchThreads {
+    fn into_uri(&self) -> Uri {
         format!("{}/{}/threads.json", API_URI_PREFIX, self.0)
             .parse()
             .unwrap_or_else(|err| {
@@ -277,7 +277,7 @@ impl Handler<FetchThreads> for Fetcher {
     type Result = RateLimitedResponse<(Vec<Thread>, DateTime<Utc>), FetchError>;
     fn handle(&mut self, msg: FetchThreads, ctx: &mut Self::Context) -> Self::Result {
         let future = Box::new(
-            self.fetch_with_last_modified(msg.into(), msg, ctx)
+            self.fetch_with_last_modified(msg.into_uri(), msg, ctx)
                 .from_err()
                 .and_then(move |(body, last_modified)| {
                     let threads: Vec<ThreadPage> = serde_json::from_slice(&body)?;
@@ -308,8 +308,8 @@ impl Message for FetchArchive {
     type Result = Result<Vec<u64>, FetchError>;
 }
 
-impl Into<Uri> for FetchArchive {
-    fn into(self) -> Uri {
+impl FetchArchive {
+    fn into_uri(&self) -> Uri {
         format!("{}/{}/archive.json", API_URI_PREFIX, self.0)
             .parse()
             .unwrap_or_else(|err| {
@@ -323,7 +323,7 @@ impl Handler<FetchArchive> for Fetcher {
     fn handle(&mut self, msg: FetchArchive, _ctx: &mut Self::Context) -> Self::Result {
         let future = Box::new(
             self.client
-                .get(msg.into())
+                .get(msg.into_uri())
                 .from_err()
                 .and_then(move |res| match res.status() {
                     StatusCode::OK => future::ok(res),
@@ -345,8 +345,8 @@ impl Handler<FetchArchive> for Fetcher {
 #[derive(Debug, Message)]
 pub struct FetchMedia(pub Board, pub String);
 
-impl Into<Uri> for FetchMedia {
-    fn into(self) -> Uri {
+impl FetchMedia {
+    fn into_uri(&self) -> Uri {
         format!("{}/{}/{}", IMG_URI_PREFIX, self.0, self.1)
             .parse()
             .unwrap_or_else(|err| {
@@ -376,7 +376,7 @@ impl Handler<FetchMedia> for Fetcher {
         std::fs::create_dir_all(&real_path).unwrap();
         real_path.push(msg.1.to_string());
 
-        let future = self.client.get(msg.into())
+        let future = self.client.get(msg.into_uri())
             .from_err()
             .join(tokio::fs::File::create(temp_path.clone()).from_err())
             .and_then(move |(res, file)| match res.status() {
