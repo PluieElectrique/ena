@@ -122,6 +122,7 @@ impl Board {
     pub fn max_threads(self) -> usize {
         match self {
             Board::f => 30,
+            Board::pol => 200,
             _ => 150,
         }
     }
