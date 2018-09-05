@@ -4,6 +4,8 @@ use std::fmt;
 
 use serde::{Deserialize, Deserializer};
 
+mod tests;
+
 pub const API_URI_PREFIX: &str = "https://a.4cdn.org";
 pub const IMG_URI_PREFIX: &str = "https://i.4cdn.org";
 
