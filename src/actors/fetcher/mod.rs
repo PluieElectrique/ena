@@ -221,7 +221,7 @@ impl Handler<UpdateLastModified> for Fetcher {
         if self
             .last_modified
             .get(&msg.0)
-            .map_or(true, |&dt| dt < msg.1)
+            .map_or(true, |&dt| dt <= msg.1)
         {
             self.last_modified.insert(msg.0, msg.1);
         } else {
