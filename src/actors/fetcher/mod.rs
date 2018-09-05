@@ -235,7 +235,7 @@ impl Message for FetchThread {
 }
 
 impl FetchThread {
-    fn into_uri(&self) -> Uri {
+    fn to_uri(&self) -> Uri {
         format!("{}/{}/thread/{}.json", API_URI_PREFIX, self.0, self.1)
             .parse()
             .unwrap_or_else(|err| {
@@ -249,7 +249,7 @@ impl Handler<FetchThread> for Fetcher {
 
     fn handle(&mut self, msg: FetchThread, ctx: &mut Self::Context) -> Self::Result {
         let future = Box::new(
-            self.fetch_with_last_modified(msg.into_uri(), msg, ctx)
+            self.fetch_with_last_modified(msg.to_uri(), msg, ctx)
                 .from_err()
                 .and_then(move |(body, last_modified)| {
                     let PostsWrapper { posts } = serde_json::from_slice(&body)?;
@@ -271,7 +271,7 @@ impl Message for FetchThreads {
 }
 
 impl FetchThreads {
-    fn into_uri(&self) -> Uri {
+    fn to_uri(&self) -> Uri {
         format!("{}/{}/threads.json", API_URI_PREFIX, self.0)
             .parse()
             .unwrap_or_else(|err| {
@@ -284,7 +284,7 @@ impl Handler<FetchThreads> for Fetcher {
     type Result = RateLimitedResponse<(Vec<Thread>, DateTime<Utc>), FetchError>;
     fn handle(&mut self, msg: FetchThreads, ctx: &mut Self::Context) -> Self::Result {
         let future = Box::new(
-            self.fetch_with_last_modified(msg.into_uri(), msg, ctx)
+            self.fetch_with_last_modified(msg.to_uri(), msg, ctx)
                 .from_err()
                 .and_then(move |(body, last_modified)| {
                     let threads: Vec<ThreadPage> = serde_json::from_slice(&body)?;
@@ -316,7 +316,7 @@ impl Message for FetchArchive {
 }
 
 impl FetchArchive {
-    fn into_uri(&self) -> Uri {
+    fn to_uri(&self) -> Uri {
         format!("{}/{}/archive.json", API_URI_PREFIX, self.0)
             .parse()
             .unwrap_or_else(|err| {
@@ -330,7 +330,7 @@ impl Handler<FetchArchive> for Fetcher {
     fn handle(&mut self, msg: FetchArchive, _ctx: &mut Self::Context) -> Self::Result {
         let future = Box::new(
             self.client
-                .get(msg.into_uri())
+                .get(msg.to_uri())
                 .from_err()
                 .and_then(move |res| match res.status() {
                     StatusCode::OK => future::ok(res),
@@ -353,7 +353,7 @@ impl Handler<FetchArchive> for Fetcher {
 pub struct FetchMedia(pub Board, pub String);
 
 impl FetchMedia {
-    fn into_uri(&self) -> Uri {
+    fn to_uri(&self) -> Uri {
         format!("{}/{}/{}", IMG_URI_PREFIX, self.0, self.1)
             .parse()
             .unwrap_or_else(|err| {
@@ -383,7 +383,7 @@ impl Handler<FetchMedia> for Fetcher {
         std::fs::create_dir_all(&real_path).unwrap();
         real_path.push(msg.1.to_string());
 
-        let future = self.client.get(msg.into_uri())
+        let future = self.client.get(msg.to_uri())
             .from_err()
             .join(tokio::fs::File::create(temp_path.clone()).from_err())
             .and_then(move |(res, file)| match res.status() {
