@@ -32,7 +32,8 @@ fn main() {
     ).unwrap_or_else(|err| {
         error!("Database initialization error: {}", err);
         process::exit(1);
-    }).start();
+    });
+    let database = Arbiter::start(|_| database);
 
     let fetcher = Fetcher::new(
         &config.boards,
