@@ -191,6 +191,7 @@ impl ThreadUpdater {
                         act.thread_meta.insert(no, curr_meta);
                     }
                     Err(err) => match err {
+                        FetchError::NotModified => {}
                         FetchError::NotFound => {
                             warn!("/{}/ No. {} was deleted before it could be updated",
                                 act.board,

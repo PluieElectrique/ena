@@ -1,8 +1,9 @@
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use actix::prelude::*;
 use chrono::prelude::*;
 use futures::prelude::*;
+use tokio::timer::Delay;
 
 use super::fetcher::{FetchError, FetchThreads, Fetcher};
 use super::ThreadUpdater;
@@ -130,10 +131,17 @@ impl BoardPoller {
             updates
         );
 
+        let future = self
+            .thread_updater
+            .send(BoardUpdate(updates, last_modified))
+            .map_err(|err| error!("{}", err));
         Arbiter::spawn(
-            self.thread_updater
-                .send(BoardUpdate(updates, last_modified))
-                .map_err(|err| error!("{}", err)),
+            // It often takes 1-2 seconds for new data to go from an updated last_modified in
+            // threads.json to actually showing up at the .json endpoint. We wait 3 seconds to be
+            // safe and ensure that ThreadUpdater doesn't read old data.
+            Delay::new(Instant::now() + Duration::from_secs(3))
+                .map_err(|err| error!("{}", err))
+                .and_then(|_| future),
         );
         self.threads = curr_threads;
     }
