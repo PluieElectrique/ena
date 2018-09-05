@@ -38,7 +38,6 @@ fn main() {
     let database = Arbiter::start(|_| database);
 
     let fetcher = Fetcher::new(
-        &config.boards,
         config.media_path,
         &config.media_rate_limiting,
         &config.thread_rate_limiting,

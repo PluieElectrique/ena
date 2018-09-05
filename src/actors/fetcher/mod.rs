@@ -1,6 +1,6 @@
 use std;
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use actix::dev::{MessageResponse, ResponseChannel};
 use actix::prelude::*;
@@ -45,38 +45,11 @@ impl Actor for Fetcher {
 }
 
 impl Fetcher {
-    /// The list of boards is used to create the media directories ahead of time. No media files
-    /// from boards not in this list should be requested, as their directories may not exist and
-    /// will cause the downloads to fail.
     pub fn new(
-        boards: &[Board],
-        mut media_path: PathBuf,
+        media_path: PathBuf,
         media_rl_config: &RateLimitingConfig,
         thread_rl_config: &RateLimitingConfig,
     ) -> Result<Self, Error> {
-        let create_dir = |path: &Path| {
-            use std::io::ErrorKind;
-            match std::fs::create_dir(path) {
-                Ok(()) => Ok(()),
-                Err(err) => match err.kind() {
-                    ErrorKind::AlreadyExists => Ok(()),
-                    _ => Err(err).context("Could not create directory"),
-                },
-            }
-        };
-
-        create_dir(media_path.as_ref())?;
-        for board in boards {
-            media_path.push(board.to_string());
-            create_dir(media_path.as_ref())?;
-            for dir in &["image", "thumb", "tmp"] {
-                media_path.push(dir.to_string());
-                create_dir(media_path.as_ref())?;
-                media_path.pop();
-            }
-            media_path.pop();
-        }
-
         let mut runtime = Runtime::new().unwrap();
         let https = HttpsConnector::new(2).context("Could not create HttpsConnector")?;
         let client = Client::builder().build::<_, Body>(https);
@@ -392,6 +365,7 @@ impl Handler<FetchMedia> for Fetcher {
         let mut temp_path = self.media_path.clone();
         temp_path.push(msg.0.to_string());
         temp_path.push("tmp");
+        std::fs::create_dir_all(&temp_path).unwrap();
         temp_path.push(msg.1.to_string());
 
         let mut real_path = self.media_path.clone();
