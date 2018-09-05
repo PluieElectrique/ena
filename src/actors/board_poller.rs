@@ -147,12 +147,14 @@ impl BoardPoller {
     }
 
     fn poll(&self, interval: u64, ctx: &mut Context<Self>) {
-        ctx.run_later(Duration::from_secs(interval), |act, ctx| {
+        let duration = Duration::from_secs(interval);
+        ctx.run_later(duration, move |act, ctx| {
             ctx.spawn(
                 act.fetcher
                     .send(FetchThreads(act.board))
                     .map_err(|err| log_error!(&err))
                     .into_actor(act)
+                    .timeout(duration, ())
                     .map(|res, act, ctx| {
                         debug!("Fetched threads from /{}/", act.board);
                         match res {
@@ -164,6 +166,9 @@ impl BoardPoller {
                                 _ => error!("{}", err),
                             },
                         }
+                        act.poll(act.interval, ctx);
+                    }).map_err(|_, act, ctx| {
+                        error!("Failed to poll threads for /{}/", act.board);
                         act.poll(act.interval, ctx);
                     }),
             );
