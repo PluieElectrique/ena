@@ -1,5 +1,6 @@
 use std::time::{Duration, Instant};
 
+use actix::fut;
 use actix::prelude::*;
 use chrono::prelude::*;
 use futures::prelude::*;
@@ -23,7 +24,7 @@ impl Actor for BoardPoller {
     type Context = Context<Self>;
 
     fn started(&mut self, ctx: &mut Context<Self>) {
-        self.poll(0, ctx);
+        self.poll(ctx);
     }
 }
 
@@ -146,33 +147,35 @@ impl BoardPoller {
         self.threads = curr_threads;
     }
 
-    fn poll(&self, interval: u64, ctx: &mut Context<Self>) {
-        let duration = Duration::from_secs(interval);
-        ctx.run_later(duration, move |act, ctx| {
-            ctx.spawn(
-                act.fetcher
-                    .send(FetchThreads(act.board))
-                    .map_err(|err| log_error!(&err))
-                    .into_actor(act)
-                    .timeout(duration, ())
-                    .map(|res, act, ctx| {
-                        debug!("Fetched threads from /{}/", act.board);
-                        match res {
-                            Ok((threads, last_modified)) => {
-                                act.update_threads(threads, last_modified);
+    fn poll(&self, ctx: &mut Context<Self>) {
+        ctx.spawn(
+            self.fetcher
+                .send(FetchThreads(self.board))
+                .map_err(|err| log_error!(&err))
+                .into_actor(self)
+                .timeout(Duration::from_secs(self.interval), ())
+                .then(|res, act, ctx| {
+                    match res {
+                        Ok(ok) => {
+                            debug!("Fetched threads from /{}/", act.board);
+                            match ok {
+                                Ok((threads, last_modified)) => {
+                                    act.update_threads(threads, last_modified);
+                                }
+                                Err(err) => match err {
+                                    FetchError::NotModified => {}
+                                    _ => error!("{}", err),
+                                },
                             }
-                            Err(err) => match err {
-                                FetchError::NotModified => {}
-                                _ => error!("{}", err),
-                            },
                         }
-                        act.poll(act.interval, ctx);
-                    }).map_err(|_, act, ctx| {
-                        error!("Failed to poll threads for /{}/", act.board);
-                        act.poll(act.interval, ctx);
-                    }),
-            );
-        });
+                        Err(_) => error!("Failed to poll threads for /{}/", act.board),
+                    }
+                    ctx.run_later(Duration::from_secs(act.interval), |act, ctx| {
+                        act.poll(ctx);
+                    });
+                    fut::ok(())
+                }),
+        );
     }
 }
 
