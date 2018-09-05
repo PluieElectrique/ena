@@ -172,7 +172,7 @@ impl ThreadUpdater {
                             }
                         }
                         debug!(
-                            "/{}/ No. {} has {} new post(s), {} modified post(s), and {} deleted post(s)",
+                            "/{}/ No. {}: {:>2} new, {:>2} modified, {:>2} deleted",
                             act.board,
                             no,
                             new_posts.len(),
