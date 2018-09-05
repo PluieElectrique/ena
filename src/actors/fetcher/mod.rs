@@ -1,9 +1,11 @@
 use std;
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::time::Duration;
 
 use actix::dev::{MessageResponse, ResponseChannel};
 use actix::prelude::*;
+use chrono;
 use chrono::prelude::*;
 use failure::{Error, ResultExt};
 use futures::future;
@@ -41,6 +43,11 @@ impl Actor for Fetcher {
 
     fn started(&mut self, ctx: &mut Self::Context) {
         ctx.set_mailbox_capacity(200);
+        // Clean up old Last-Modified values so that we don't leak memory
+        ctx.run_interval(Duration::from_secs(86400), |act, _ctx| {
+            let yesterday = Utc::now() - chrono::Duration::days(1);
+            act.last_modified.retain(|_key, &mut dt| dt > yesterday);
+        });
     }
 }
 
