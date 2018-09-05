@@ -29,6 +29,8 @@ fn main() {
         &config.charset,
         config.adjust_timestamps,
         config.create_index_counters,
+        config.download_media,
+        config.download_thumbs,
     ).unwrap_or_else(|err| {
         error!("Database initialization error: {}", err);
         process::exit(1);

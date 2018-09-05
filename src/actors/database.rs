@@ -61,6 +61,8 @@ WHERE num = :num AND subnum = 0";
 pub struct Database {
     pool: Pool,
     adjust_timestamps: bool,
+    download_media: bool,
+    download_thumbs: bool,
 }
 
 impl Database {
@@ -70,6 +72,8 @@ impl Database {
         charset: &str,
         adjust_timestamps: bool,
         create_index_counters: bool,
+        download_media: bool,
+        download_thumbs: bool,
     ) -> Result<Self, my::errors::Error> {
         let charset_board_sql = BOARD_SQL.replace(CHARSET_REPLACE, charset);
 
@@ -94,6 +98,8 @@ impl Database {
         Ok(Self {
             pool,
             adjust_timestamps,
+            download_media,
+            download_thumbs,
         })
     }
 
@@ -192,22 +198,36 @@ impl Handler<InsertPosts> for Database {
 
         let insert_query = INSERT_QUERY.replace(BOARD_REPLACE, &msg.0.to_string());
         let new_media_query = NEW_MEDIA_QUERY.replace(BOARD_REPLACE, &msg.0.to_string());
-        Box::new(
-            self.pool
-                .get_conn()
-                .and_then(|conn| conn.batch_exec(insert_query, params))
-                .and_then(|conn| conn.query(new_media_query))
-                .and_then(|results| {
-                    results.reduce_and_drop(vec![], |mut files: Vec<String>, row| {
-                        let (media, preview) = my::from_row(row);
-                        if let Some(media) = media {
-                            files.push(media);
-                        }
-                        files.push(preview);
-                        files
-                    })
-                }).map(|(_conn, files)| files),
-        )
+
+        let future = self
+            .pool
+            .get_conn()
+            .and_then(|conn| conn.batch_exec(insert_query, params));
+
+        if !self.download_media && !self.download_thumbs {
+            Box::new(future.map(|_conn| vec![]))
+        } else {
+            let download_media = self.download_media;
+            let download_thumbs = self.download_thumbs;
+            Box::new(
+                future
+                    .and_then(|conn| conn.query(new_media_query))
+                    .and_then(move |results| {
+                        results.reduce_and_drop(vec![], move |mut files: Vec<String>, row| {
+                            let (media, preview) = my::from_row(row);
+                            if download_media {
+                                if let Some(media) = media {
+                                    files.push(media);
+                                }
+                            }
+                            if download_thumbs {
+                                files.push(preview);
+                            }
+                            files
+                        })
+                    }).map(|(_conn, files)| files),
+            )
+        }
     }
 }
 

@@ -6,6 +6,10 @@ boards = [""]
 # Seconds to wait between fetching the threads.json of each board
 poll_interval = 30
 
+# Download full image and media files
+download_media = true
+download_thumbs = true
+
 # `interval` is in seconds.
 # `max_interval` is the maximum number of requests that can be made in an interval.
 # `max_concurrent` is the maximum number of requests that can run at once.
