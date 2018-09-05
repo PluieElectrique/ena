@@ -168,7 +168,7 @@ where
     }
 }
 
-#[derive(Eq, Hash, PartialEq)]
+#[derive(Debug, Eq, Hash, PartialEq)]
 enum FetchKey {
     Thread(FetchThread),
     Threads(FetchThreads),
@@ -224,6 +224,11 @@ impl Handler<UpdateLastModified> for Fetcher {
             .map_or(true, |&dt| dt < msg.1)
         {
             self.last_modified.insert(msg.0, msg.1);
+        } else {
+            warn!(
+                "Ignoring older Last-Modified for {:?}: {} > {}",
+                msg.0, self.last_modified[&msg.0], msg.1
+            );
         }
     }
 }
