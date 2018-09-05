@@ -126,6 +126,7 @@ impl ThreadUpdater {
                         };
 
                         if prev_meta.op_data != curr_meta.op_data {
+                            debug!("Updating OP data of /{}/ No. {}", act.board, no);
                             Arbiter::spawn(
                                 act.database
                                     .send(UpdateOp(act.board, no, curr_meta.op_data.clone()))
