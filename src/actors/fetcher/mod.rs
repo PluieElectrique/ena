@@ -155,7 +155,7 @@ impl Fetcher {
                 }
             }).and_then(move |(res, last_modified)| {
                 myself
-                    .send(UpdateLastFetched(key, last_modified))
+                    .send(UpdateLastModified(key, last_modified))
                     .then(|_| res.into_body().concat2().from_err())
                     .map(move |body| (body, last_modified))
             })
@@ -222,13 +222,15 @@ impl_enum_from!(std::io::Error, FetchError, IoError);
 // We would like to return an ActorFuture from Fetcher, but we can't because ActorFutures can only
 // run on their own contexts. So, Fetcher must send a message to itself to update `last_modified`.
 #[derive(Message)]
-struct UpdateLastFetched(FetchThreads, DateTime<Utc>);
+struct UpdateLastModified(FetchThreads, DateTime<Utc>);
 
-impl Handler<UpdateLastFetched> for Fetcher {
+impl Handler<UpdateLastModified> for Fetcher {
     type Result = ();
 
-    fn handle(&mut self, msg: UpdateLastFetched, _ctx: &mut Self::Context) {
-        self.last_modified.insert(msg.0, msg.1);
+    fn handle(&mut self, msg: UpdateLastModified, _ctx: &mut Self::Context) {
+        if self.last_modified.get(&msg.0).map_or(true, |&dt| dt < msg.1) {
+            self.last_modified.insert(msg.0, msg.1);
+        }
     }
 }
 
