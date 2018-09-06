@@ -11,7 +11,6 @@ pub const IMG_URI_PREFIX: &str = "https://i.4cdn.org";
 
 #[derive(Deserialize)]
 pub struct ThreadPage {
-    pub page: u8,
     pub threads: Vec<Thread>,
 }
 
@@ -19,8 +18,6 @@ pub struct ThreadPage {
 pub struct Thread {
     pub no: u64,
     pub last_modified: u64,
-    #[serde(skip_deserializing)]
-    pub page: u8,
     #[serde(skip_deserializing)]
     pub bump_index: u8,
 }

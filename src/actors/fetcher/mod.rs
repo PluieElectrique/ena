@@ -294,9 +294,6 @@ impl Handler<FetchThreads> for Fetcher {
                 .and_then(move |(body, last_modified)| {
                     let threads: Vec<ThreadPage> = serde_json::from_slice(&body)?;
                     let mut threads = threads.into_iter().fold(vec![], |mut acc, mut page| {
-                        for thread in &mut page.threads {
-                            thread.page = page.page;
-                        }
                         acc.append(&mut page.threads);
                         acc
                     });
