@@ -155,20 +155,17 @@ impl BoardPoller {
                 .into_actor(self)
                 .timeout(Duration::from_secs(self.interval), ())
                 .then(|res, act, ctx| {
-                    match res {
-                        Ok(ok) => {
-                            debug!("Fetched threads from /{}/", act.board);
-                            match ok {
-                                Ok((threads, last_modified)) => {
-                                    act.update_threads(threads, last_modified);
-                                }
-                                Err(err) => match err {
-                                    FetchError::NotModified => {}
-                                    _ => error!("{}", err),
-                                },
+                    if let Ok(res) = res {
+                        debug!("Fetched threads from /{}/", act.board);
+                        match res {
+                            Ok((threads, last_modified)) => {
+                                act.update_threads(threads, last_modified);
                             }
+                            Err(err) => match err {
+                                FetchError::NotModified => {}
+                                _ => error!("{}", err),
+                            },
                         }
-                        Err(_) => error!("Failed to poll threads for /{}/", act.board),
                     }
                     ctx.run_later(Duration::from_secs(act.interval), |act, ctx| {
                         act.poll(ctx);
