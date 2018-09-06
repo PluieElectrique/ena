@@ -12,7 +12,7 @@ chrono = { version = "0.4", default-features = false }
 chrono-tz = "0.5"
 failure = "0.1"
 futures = "0.1"
-html5ever = { git = "https://github.com/PluieElectrique/html5ever", branch = "escape_log_enabled" }
+html5ever = { git = "https://github.com/servo/html5ever", rev = "0b538dd" }
 hyper = { version = "0.12", default-features = false }
 hyper-tls = "0.3"
 lazy_static = "1.1"
