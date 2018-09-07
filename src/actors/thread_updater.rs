@@ -75,9 +75,9 @@ impl ThreadUpdater {
             .into_actor(self)
             .map(move |res, act, _ctx| {
                 match res {
-                    Ok((thread, _)) => {
+                    Ok((thread, last_modified)) => {
                         debug!("Inserting new thread /{}/ No. {}", act.board, no);
-                        act.thread_meta.insert(no, ThreadMetadata::from_thread(&thread));
+                        act.thread_meta.insert(no, ThreadMetadata::from_thread(&thread, last_modified));
                         act.insert_posts(thread);
                     }
                     Err(err) => match err {
@@ -109,7 +109,7 @@ impl ThreadUpdater {
             .map(move |res, act, _ctx| {
                 match res {
                     Ok((mut thread, last_modified)) => {
-                        let curr_meta = ThreadMetadata::from_thread(&thread);
+                        let curr_meta = ThreadMetadata::from_thread(&thread, last_modified);
                         let prev_meta = match act.thread_meta.remove(&no) {
                             Some(meta) => meta,
                             None => {
@@ -123,6 +123,15 @@ impl ThreadUpdater {
                                 return;
                             },
                         };
+
+                        if curr_meta.last_modified < prev_meta.last_modified {
+                            error!(
+                                "Ignoring old thread data: {} < {}",
+                                curr_meta.last_modified,
+                                prev_meta.last_modified
+                            );
+                            return;
+                        }
 
                         if prev_meta.op_data != curr_meta.op_data {
                             debug!("Updating OP data of /{}/ No. {}", act.board, no);
@@ -267,13 +276,15 @@ impl Handler<BoardUpdate> for ThreadUpdater {
 }
 
 struct ThreadMetadata {
+    last_modified: DateTime<Utc>,
     op_data: four_chan::OpData,
     posts: Vec<PostMetadata>,
 }
 
 impl ThreadMetadata {
-    fn from_thread(thread: &[four_chan::Post]) -> Self {
+    fn from_thread(thread: &[four_chan::Post], last_modified: DateTime<Utc>) -> Self {
         Self {
+            last_modified,
             op_data: thread[0].op_data.clone(),
             posts: thread.iter().map(PostMetadata::from).collect(),
         }
