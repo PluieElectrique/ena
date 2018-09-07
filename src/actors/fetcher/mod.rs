@@ -77,7 +77,7 @@ impl Fetcher {
         })
     }
 
-    fn new_rl_thread_response<I, E>(
+    fn new_thread_rl_response<I, E>(
         &self,
         future: Box<Future<Item = I, Error = E>>,
     ) -> RateLimitedResponse<I, E> {
@@ -265,7 +265,7 @@ impl Handler<FetchThread> for Fetcher {
                     }
                 }),
         );
-        self.new_rl_thread_response(future)
+        self.new_thread_rl_response(future)
     }
 }
 
@@ -307,7 +307,7 @@ impl Handler<FetchThreads> for Fetcher {
                     }
                 }),
         );
-        self.new_rl_thread_response(future)
+        self.new_thread_rl_response(future)
     }
 }
 
@@ -347,7 +347,7 @@ impl Handler<FetchArchive> for Fetcher {
                     }
                 }),
         );
-        self.new_rl_thread_response(future)
+        self.new_thread_rl_response(future)
     }
 }
 
