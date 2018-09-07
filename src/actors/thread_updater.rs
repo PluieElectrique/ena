@@ -240,24 +240,17 @@ impl Handler<BoardUpdate> for ThreadUpdater {
                     ctx.spawn(self.handle_modified(no));
                 }
                 BumpedOff(no) => {
-                    // If this is true, we will remove the thread's metadata after we update it
-                    if !(self.board.is_archived() && self.refetch_archived_threads) {
-                        debug!("/{}/ No. {} was bumped off", self.board, no);
-                        self.thread_meta.remove(&no);
-                    } else {
+                    if self.board.is_archived() && self.refetch_archived_threads {
                         debug!("/{}/ No. {} was bumped off, refetching", self.board, no);
-                    }
-
-                    if self.board.is_archived() {
-                        if self.refetch_archived_threads {
-                            ctx.spawn(self.handle_modified(no).map(move |_, act, _ctx| {
-                                act.thread_meta.remove(&no);
-                            }));
-                        } else {
+                        ctx.spawn(self.handle_modified(no).map(move |_, act, _ctx| {
+                            act.thread_meta.remove(&no);
+                        }));
+                    } else {
+                        debug!("/{}/ No. {} was bumped off", self.board, no);
+                        if self.board.is_archived() || self.always_add_archive_times {
                             removed_threads.push((no, RemovedStatus::Archived));
                         }
-                    } else if self.always_add_archive_times {
-                        removed_threads.push((no, RemovedStatus::Archived));
+                        self.thread_meta.remove(&no);
                     }
                 }
                 Deleted(no) => {
