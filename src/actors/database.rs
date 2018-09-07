@@ -163,9 +163,8 @@ impl Handler<InsertPosts> for Database {
                 "poster_country" => post.country,
             };
 
-            let mut image_params;
-            if let Some(image) = post.image {
-                image_params = params! {
+            let mut image_params = if let Some(image) = post.image {
+                params! {
                     "media_filename" => image.filename + &image.ext,
                     "media_orig" => format!("{}{}", image.time_millis, image.ext),
                     "media_w" => image.image_width,
@@ -176,9 +175,9 @@ impl Handler<InsertPosts> for Database {
                     "preview_w" => image.thumbnail_width,
                     "preview_h" => image.thumbnail_height,
                     "spoiler" => image.spoiler,
-                };
+                }
             } else {
-                image_params = params! {
+                params! {
                     "media_filename" => None::<String>,
                     "media_orig" => None::<String>,
                     "media_w" => 0,
@@ -189,8 +188,8 @@ impl Handler<InsertPosts> for Database {
                     "preview_w" => 0,
                     "preview_h" => 0,
                     "spoiler" => false,
-                };
-            }
+                }
+            };
             params.append(&mut image_params);
 
             params

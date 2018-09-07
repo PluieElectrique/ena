@@ -110,31 +110,30 @@ impl Fetcher {
         self.client
             .request(request)
             .from_err()
-            .and_then(move |res| {
-                let new_modified = res
-                    .headers()
-                    .get(header::LAST_MODIFIED)
-                    .map(|new| {
-                        Utc.datetime_from_str(new.to_str().unwrap(), RFC_1123_FORMAT)
-                            .unwrap()
-                    }).unwrap_or_else(Utc::now);
+            .and_then(move |res| match res.status() {
+                StatusCode::NOT_FOUND => future::err(FetchError::NotFound),
+                StatusCode::NOT_MODIFIED => future::err(FetchError::NotModified),
+                StatusCode::OK => {
+                    let new_modified = res
+                        .headers()
+                        .get(header::LAST_MODIFIED)
+                        .map(|new| {
+                            Utc.datetime_from_str(new.to_str().unwrap(), RFC_1123_FORMAT)
+                                .unwrap()
+                        }).unwrap_or_else(Utc::now);
 
-                match res.status() {
-                    StatusCode::NOT_FOUND => future::err(FetchError::NotFound),
-                    StatusCode::NOT_MODIFIED => future::err(FetchError::NotModified),
-                    StatusCode::OK => {
-                        if last_modified > new_modified {
-                            warn!(
-                                "API sent old data: If-Modified-Since: {}, but Last-Modified: {}",
-                                last_modified.format(RFC_1123_FORMAT),
-                                new_modified.format(RFC_1123_FORMAT),
-                            );
-                            return future::err(FetchError::NotModified);
-                        }
+                    if last_modified > new_modified {
+                        warn!(
+                            "API sent old data: If-Modified-Since: {}, but Last-Modified: {}",
+                            last_modified.format(RFC_1123_FORMAT),
+                            new_modified.format(RFC_1123_FORMAT),
+                        );
+                        future::err(FetchError::NotModified)
+                    } else {
                         future::ok((res, new_modified))
                     }
-                    _ => future::err(res.status().into()),
                 }
+                _ => future::err(res.status().into()),
             }).and_then(move |(res, last_modified)| {
                 myself
                     .send(UpdateLastModified(key, last_modified))
@@ -176,7 +175,6 @@ enum FetchKey {
 impl_enum_from!(FetchThread, FetchKey, Thread);
 impl_enum_from!(FetchThreads, FetchKey, Threads);
 
-// TODO: Use the Error/ErrorKind pattern if we need context
 #[derive(Debug, Fail)]
 pub enum FetchError {
     #[fail(display = "Hyper error")]
@@ -195,7 +193,7 @@ pub enum FetchError {
     NotFound,
 
     #[fail(display = "API returned empty data")]
-    Empty,
+    EmptyData,
 
     #[fail(display = "Timer error")]
     TimerError(#[cause] tokio::timer::Error),
@@ -259,7 +257,7 @@ impl Handler<FetchThread> for Fetcher {
                 .and_then(move |(body, last_modified)| {
                     let PostsWrapper { posts } = serde_json::from_slice(&body)?;
                     if posts.is_empty() {
-                        Err(FetchError::Empty)
+                        Err(FetchError::EmptyData)
                     } else {
                         Ok((posts, last_modified))
                     }
@@ -301,7 +299,7 @@ impl Handler<FetchThreads> for Fetcher {
                         thread.bump_index = i as u8;
                     }
                     if threads.is_empty() {
-                        Err(FetchError::Empty)
+                        Err(FetchError::EmptyData)
                     } else {
                         Ok((threads, last_modified))
                     }
@@ -341,7 +339,7 @@ impl Handler<FetchArchive> for Fetcher {
                 .and_then(move |body| {
                     let archive: Vec<u64> = serde_json::from_slice(&body)?;
                     if archive.is_empty() {
-                        Err(FetchError::Empty)
+                        Err(FetchError::EmptyData)
                     } else {
                         Ok(archive)
                     }
