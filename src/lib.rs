@@ -34,6 +34,17 @@ macro_rules! impl_enum_from {
     };
 }
 
+macro_rules! zero_format {
+    ($str:expr, $expr:expr) => {{
+        let num = $expr;
+        if num == 0 {
+            String::new()
+        } else {
+            format!($str, num)
+        }
+    }};
+}
+
 #[macro_export]
 macro_rules! log_error {
     ($fail:expr) => {{

@@ -5,6 +5,7 @@ use actix::prelude::*;
 use chrono::prelude::*;
 use futures::future;
 use futures::prelude::*;
+use log::Level;
 use twox_hash::XxHash;
 
 use super::board_poller::{BoardUpdate, ThreadUpdate};
@@ -76,7 +77,7 @@ impl ThreadUpdater {
             .map(move |res, act, _ctx| {
                 match res {
                     Ok((thread, last_modified)) => {
-                        debug!("Inserting new thread /{}/ No. {}", act.board, no);
+                        debug!("/{}/ No. {}: Inserting new thread", act.board, no);
                         act.thread_meta.insert(no, ThreadMetadata::from_thread(&thread, last_modified));
                         act.insert_posts(thread);
                     }
@@ -134,7 +135,7 @@ impl ThreadUpdater {
                         }
 
                         if prev_meta.op_data != curr_meta.op_data {
-                            debug!("Updating OP data of /{}/ No. {}", act.board, no);
+                            debug!("/{}/ No. {}: Updating OP data", act.board, no);
                             Arbiter::spawn(
                                 act.database
                                     .send(UpdateOp(act.board, no, curr_meta.op_data.clone()))
@@ -179,14 +180,24 @@ impl ThreadUpdater {
                                 }
                             }
                         }
-                        debug!(
-                            "/{}/ No. {}: {:>2} new, {:>2} modified, {:>2} deleted",
-                            act.board,
-                            no,
-                            new_posts.len(),
-                            modified_posts.len(),
-                            deleted_posts.len(),
-                        );
+                        if log_enabled!(Level::Debug) {
+                            let n = new_posts.len();
+                            let m = modified_posts.len();
+                            let d = deleted_posts.len();
+                            // Nice formatting by horrendously using arithmetic as logic
+                            if (n + m + d) > 0 {
+                                debug!(
+                                    "/{}/ No. {}: {}{}{}{}{}",
+                                    act.board,
+                                    no,
+                                    zero_format!("{} new", n),
+                                    if n * (m + d) == 0 { "" } else { ", " },
+                                    zero_format!("{} modified", m),
+                                    if d * m == 0 { "" } else { ", " },
+                                    zero_format!("{} deleted", d),
+                                );
+                            }
+                        }
 
                         act.insert_posts(new_posts);
                         if !modified_posts.is_empty() {
@@ -250,12 +261,12 @@ impl Handler<BoardUpdate> for ThreadUpdater {
                 }
                 BumpedOff(no) => {
                     if self.board.is_archived() && self.refetch_archived_threads {
-                        debug!("/{}/ No. {} was bumped off, refetching", self.board, no);
+                        debug!("/{}/ No. {}: Bumped off, refetching", self.board, no);
                         ctx.spawn(self.handle_modified(no).map(move |_, act, _ctx| {
                             act.thread_meta.remove(&no);
                         }));
                     } else {
-                        debug!("/{}/ No. {} was bumped off", self.board, no);
+                        debug!("/{}/ No. {}: Bumped off", self.board, no);
                         if self.board.is_archived() || self.always_add_archive_times {
                             removed_threads.push((no, RemovedStatus::Archived));
                         }

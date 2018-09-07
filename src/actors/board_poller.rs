@@ -4,6 +4,7 @@ use actix::fut;
 use actix::prelude::*;
 use chrono::prelude::*;
 use futures::prelude::*;
+use log::Level;
 use tokio::timer::Delay;
 
 use super::fetcher::{FetchError, FetchThreads, Fetcher};
@@ -110,12 +111,33 @@ impl BoardPoller {
             }
         }
 
-        debug!(
-            "Updating {} thread(s) from /{}/: {:?}",
-            updates.len(),
-            self.board,
-            updates
-        );
+        if log_enabled!(Level::Debug) {
+            let mut new = 0;
+            let mut modified = 0;
+            let mut bumped_off = 0;
+            let mut deleted = 0;
+
+            for update in &updates {
+                match update {
+                    New(_) => new += 1,
+                    Modified(_) => modified += 1,
+                    BumpedOff(_) => bumped_off += 1,
+                    Deleted(_) => deleted += 1,
+                }
+            }
+
+            let len = updates.len();
+            debug!(
+                "Updating /{}/: {} thread{}{}{}{}{}",
+                self.board,
+                len,
+                if len == 1 { "" } else { "s" },
+                zero_format!(", {} new", new),
+                zero_format!(", {} modified", modified),
+                zero_format!(", {} bumped off", bumped_off),
+                zero_format!(", {} deleted", deleted),
+            );
+        }
 
         let future = self
             .thread_updater

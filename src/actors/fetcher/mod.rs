@@ -15,6 +15,7 @@ use hyper::client::{Client, HttpConnector};
 use hyper::header::{self, HeaderValue};
 use hyper::{self, Body, StatusCode, Uri};
 use hyper_tls::HttpsConnector;
+use log::Level;
 use serde_json;
 use tokio;
 use tokio::runtime::Runtime;
@@ -397,8 +398,15 @@ impl Handler<FetchMedia> for Fetcher {
                         .from_err::<FetchError>()
                         .map(|(file, _)| file)
                 })
-            }).and_then(|_| {
-                debug!("Writing {:?}", real_path);
+            }).and_then(move |_| {
+                if log_enabled!(Level::Debug) {
+                    debug!(
+                        "/{}/: Writing {}{}",
+                        msg.0,
+                        if msg.1.ends_with("s.jpg") { "" } else { " " },
+                        msg.1
+                    );
+                }
                 tokio::fs::rename(temp_path, real_path).from_err()
             })
             // TODO: Retry request
