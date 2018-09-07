@@ -20,8 +20,6 @@ struct BoardsWrapper {
 #[derive(Deserialize)]
 struct Board {
     board: super::Board,
-    per_page: usize,
-    pages: usize,
     #[serde(deserialize_with = "num_to_bool")]
     #[serde(default)]
     is_archived: bool,
@@ -47,26 +45,13 @@ fn boards_json() {
     );
     runtime.shutdown_now().wait().unwrap();
 
-    for Board {
-        board,
-        per_page,
-        pages,
-        is_archived,
-    } in boards.unwrap()
-    {
+    for Board { board, is_archived } in boards.unwrap() {
         assert_eq!(
             board.is_archived(),
             is_archived,
             "/{}/'s correct archive status is {}",
             board,
             is_archived,
-        );
-        assert_eq!(
-            board.max_threads(),
-            per_page * pages,
-            "/{}/'s correct max thread count is {}",
-            board,
-            per_page * pages,
         );
     }
 }

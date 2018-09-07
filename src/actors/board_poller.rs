@@ -47,8 +47,6 @@ impl BoardPoller {
     fn update_threads(&mut self, mut curr_threads: Vec<Thread>, last_modified: DateTime<Utc>) {
         use self::ThreadUpdate::*;
         let mut updates = vec![];
-        let mut new_threads = 0;
-        let mut bumped_off_threads = false;
 
         let push_removed = {
             let last_no = curr_threads[curr_threads.len() - 1].no;
@@ -59,19 +57,17 @@ impl BoardPoller {
                 .find(|thread| thread.no == last_no)
                 .map(|thread| thread.bump_index);
 
-            move |thread: &Thread, updates: &mut Vec<_>, bumped_off_threads: &mut bool| {
+            move |thread: &Thread, updates: &mut Vec<_>| {
                 match anchor_index {
                     Some(anchor) => if thread.bump_index < anchor {
                         updates.push(Deleted(thread.no));
                     } else {
                         updates.push(BumpedOff(thread.no));
-                        *bumped_off_threads = true;
                     },
                     None => {
                         // If all of the threads have changed, we have no information and can't
                         // assume that any thread was deleted
                         updates.push(BumpedOff(thread.no));
-                        *bumped_off_threads = true;
                     }
                 }
             }
@@ -99,28 +95,17 @@ impl BoardPoller {
                             }
                             curr_thread = curr_iter.next();
                         } else if prev.no < curr.no {
-                            push_removed(prev, &mut updates, &mut bumped_off_threads);
+                            push_removed(prev, &mut updates);
                         }
                     }
                     (Some(prev), None) => {
-                        push_removed(prev, &mut updates, &mut bumped_off_threads);
+                        push_removed(prev, &mut updates);
                     }
                     (None, Some(curr)) => {
                         updates.push(New(curr.no));
-                        new_threads += 1;
                         curr_thread = curr_iter.next();
                     }
                     (None, None) => break,
-                }
-            }
-        }
-
-        // If the maximum possible thread count has never exceeded the board limit, then no threads
-        // could have been bumped off. Thus, every bumped off thread was actually deleted.
-        if bumped_off_threads && self.threads.len() + new_threads <= self.board.max_threads() {
-            for update in &mut updates {
-                if let BumpedOff(no) = *update {
-                    *update = Deleted(no);
                 }
             }
         }
