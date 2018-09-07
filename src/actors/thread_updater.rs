@@ -100,7 +100,6 @@ impl ThreadUpdater {
     fn handle_modified(
         &mut self,
         no: u64,
-        handle_deleted: bool,
     ) -> impl ActorFuture<Actor = Self, Item = (), Error = ()> {
         self.fetcher
             .send(FetchThread(self.board, no))
@@ -198,10 +197,8 @@ impl ThreadUpdater {
                                 act.board,
                                 no,
                             );
-                            if handle_deleted {
-                                act.thread_meta.remove(&no);
-                                act.handle_removed(vec![(no, RemovedStatus::Deleted)], Utc::now());
-                            }
+                            act.thread_meta.remove(&no);
+                            act.handle_removed(vec![(no, RemovedStatus::Deleted)], Utc::now());
                         },
                         // TODO: retry request
                         _ => log_error!(&err),
@@ -240,10 +237,7 @@ impl Handler<BoardUpdate> for ThreadUpdater {
             match thread {
                 New(no) => self.handle_new(no, ctx),
                 Modified(no) => {
-                    // We pass false for handle_deleted here because BoardPoller will notify us of
-                    // the deleted thread in the next poll. If we handled it here, we would mark
-                    // the thread as deleted twice.
-                    ctx.spawn(self.handle_modified(no, false));
+                    ctx.spawn(self.handle_modified(no));
                 }
                 BumpedOff(no) => {
                     // If this is true, we will remove the thread's metadata after we update it
@@ -256,9 +250,7 @@ impl Handler<BoardUpdate> for ThreadUpdater {
 
                     if self.board.is_archived() {
                         if self.refetch_archived_threads {
-                            // We pass true for handle_deleted here because BoardPoller will not
-                            // notify us about this thread anymore. So, we must handle it now.
-                            ctx.spawn(self.handle_modified(no, true).map(move |_, act, _ctx| {
+                            ctx.spawn(self.handle_modified(no).map(move |_, act, _ctx| {
                                 act.thread_meta.remove(&no);
                             }));
                         } else {
@@ -269,9 +261,11 @@ impl Handler<BoardUpdate> for ThreadUpdater {
                     }
                 }
                 Deleted(no) => {
-                    debug!("/{}/ No. {} was deleted", self.board, no);
-                    self.thread_meta.remove(&no);
-                    removed_threads.push((no, RemovedStatus::Deleted));
+                    // If this thread isn't in the map, then we've already handled its deletion
+                    if self.thread_meta.remove(&no).is_some() {
+                        debug!("/{}/ No. {} was deleted", self.board, no);
+                        removed_threads.push((no, RemovedStatus::Deleted));
+                    }
                 }
             }
         }
