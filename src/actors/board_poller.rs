@@ -15,7 +15,7 @@ use four_chan::{Board, Thread};
 pub struct BoardPoller {
     board: Board,
     threads: Vec<Thread>,
-    interval: u64,
+    interval: Duration,
     thread_updater: Addr<ThreadUpdater>,
     fetcher: Addr<Fetcher>,
 }
@@ -31,7 +31,7 @@ impl Actor for BoardPoller {
 impl BoardPoller {
     pub fn new(
         board: Board,
-        interval: u64,
+        interval: Duration,
         thread_updater: Addr<ThreadUpdater>,
         fetcher: Addr<Fetcher>,
     ) -> Self {
@@ -138,7 +138,7 @@ impl BoardPoller {
                 .send(FetchThreads(self.board))
                 .map_err(|err| log_error!(&err))
                 .into_actor(self)
-                .timeout(Duration::from_secs(self.interval), ())
+                .timeout(self.interval, ())
                 .then(|res, act, ctx| {
                     if let Ok(res) = res {
                         debug!("Fetched threads from /{}/", act.board);
@@ -152,7 +152,7 @@ impl BoardPoller {
                             },
                         }
                     }
-                    ctx.run_later(Duration::from_secs(act.interval), |act, ctx| {
+                    ctx.run_later(act.interval, |act, ctx| {
                         act.poll(ctx);
                     });
                     fut::ok(())
