@@ -103,7 +103,7 @@ enum FourChanTag {
     Quiet,
     /// `> implying`
     Quote,
-    /// Shift_JIS art on /vip/
+    /// Shift_JIS art on /jp/ and /vip/
     ShiftJIS,
     ///	███████
     Spoiler,
