@@ -296,7 +296,7 @@ impl Handler<FetchThreads> for Fetcher {
                         acc
                     });
                     for (i, thread) in threads.iter_mut().enumerate() {
-                        thread.bump_index = i as u8;
+                        thread.bump_index = i;
                     }
                     if threads.is_empty() {
                         Err(FetchError::EmptyData)

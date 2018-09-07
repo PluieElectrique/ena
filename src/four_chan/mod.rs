@@ -19,7 +19,7 @@ pub struct Thread {
     pub no: u64,
     pub last_modified: u64,
     #[serde(skip_deserializing)]
-    pub bump_index: u8,
+    pub bump_index: usize,
 }
 
 #[derive(Deserialize)]
