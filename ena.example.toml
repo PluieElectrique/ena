@@ -6,16 +6,17 @@ boards = [""]
 # Seconds to wait between fetching the threads.json of each board
 poll_interval = 30
 
-# Download full image and media files
+# Download full image/media files
 download_media = true
+# Download thumbnails
 download_thumbs = true
 
 # `interval` is in seconds.
 # `max_interval` is the maximum number of requests that can be made in an interval.
 # `max_concurrent` is the maximum number of requests that can run at once.
-media_rate_limiting = { interval = 60, max_interval = 300, max_concurrent = 50 }
+media_rate_limiting = { interval = 60, max_interval = 600, max_concurrent = 100 }
 # This includes requests for threads, threads.json, and archive.json
-thread_rate_limiting = { interval = 60, max_interval = 180, max_concurrent = 25 }
+thread_rate_limiting = { interval = 60, max_interval = 300, max_concurrent = 50 }
 
 
 ## Database/media settings
@@ -29,13 +30,13 @@ media_dir = "media"
 # Adjust timestamps to EST/EDT (should be `true` for compatibility)
 adjust_timestamps = true
 
-# On archived boards, fetch a thread again after archival. This allows for more accurate archive
-# times (how much more depends on `poll_interval`) and catches sage posts/other updates which would
-# otherwise have been missed, at the cost of an extra request (should be `true` for compatibility)
+# On archived boards, fetch threads after they're bumped off. At the cost of an extra request, this
+# allows for more accurate archive times (how much more depends on `poll_interval`) and catches sage
+# posts/deletions/changes which would otherwise have been missed (should be `true` for compatibility)
 refetch_archived_threads = true
 
-# Add archive times to bumped-off threads on boards that don't have archiving (should be `false`
-# for compatibility)
+# Add archive times to bumped-off threads on boards without archiving (should be `false` for
+# compatibility)
 always_add_archive_times = false
 
 # Create the `index_counters` table used by Sphinx/FoolFuuka (should be `true` for compatibility)
