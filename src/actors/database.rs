@@ -18,6 +18,7 @@ use html;
 
 const BOARD_REPLACE: &str = "%%BOARD%%";
 const CHARSET_REPLACE: &str = "%%CHARSET%%";
+const ROW_COUNT_REPLACE: &str = "%%ROW_COUNT%%";
 const BOARD_SQL: &str = include_str!("../sql/boards.sql");
 const INDEX_COUNTERS_SQL: &str = include_str!("../sql/index_counters.sql");
 const TRIGGER_SQL: &str = include_str!("../sql/triggers.sql");
@@ -28,8 +29,15 @@ media_hash, media_orig, spoiler, capcode, name, trip, title, comment, sticky, lo
 poster_country)
 VALUES (:num, :subnum, :thread_num, :op, :timestamp, :timestamp_expired, :preview_orig, :preview_w,
 :preview_h, :media_filename, :media_w, :media_h, :media_size, :media_hash, :media_orig, :spoiler,
-:capcode, :name, :trip, :title, :comment, :sticky, :locked, :poster_hash, :poster_country)";
+:capcode, :name, :trip, :title, :comment, :sticky, :locked, :poster_hash, :poster_country)
+ON DUPLICATE KEY UPDATE
+    sticky = VALUES(sticky),
+    locked = VALUES(locked),
+    timestamp_expired = VALUES(timestamp_expired),
+    comment = VALUES(comment),
+    spoiler = VALUES(spoiler);";
 
+// The images table MUST have an AUTO_INCREMENT primary key for this to work correctly
 const NEW_MEDIA_QUERY: &str = "SELECT
     IF(total = 1, media_orig, NULL),
     preview_orig
@@ -39,7 +47,7 @@ INNER JOIN `%%BOARD%%_images` ON
     AND preview_orig in (preview_reply, preview_op)
 WHERE doc_id BETWEEN
     LAST_INSERT_ID()
-    AND LAST_INSERT_ID() + ROW_COUNT() - 1
+    AND IF(LAST_INSERT_ID() = 0, 0, LAST_INSERT_ID() + %%ROW_COUNT%% - 1)
     AND banned = 0;";
 
 const UPDATE_OP_QUERY: &str = "UPDATE `%%BOARD%%`
@@ -196,20 +204,27 @@ impl Handler<InsertPosts> for Database {
         }).collect();
 
         let insert_query = INSERT_QUERY.replace(BOARD_REPLACE, &msg.0.to_string());
-        let new_media_query = NEW_MEDIA_QUERY.replace(BOARD_REPLACE, &msg.0.to_string());
-
-        let future = self
-            .pool
-            .get_conn()
-            .and_then(|conn| conn.batch_exec(insert_query, params));
+        let new_media_query = NEW_MEDIA_QUERY
+            .replace(BOARD_REPLACE, &msg.0.to_string())
+            .replace(ROW_COUNT_REPLACE, &params.len().to_string());
 
         if !self.download_media && !self.download_thumbs {
-            Box::new(future.map(|_conn| vec![]))
+            Box::new(
+                self.pool
+                    .get_conn()
+                    .and_then(|conn| conn.batch_exec(insert_query, params))
+                    .map(|_conn| vec![]),
+            )
         } else {
             let download_media = self.download_media;
             let download_thumbs = self.download_thumbs;
             Box::new(
-                future
+                self.pool
+                    .get_conn()
+                    // Clear LAST_INSERT_ID so that we don't redownload media when we don't insert
+                    // new posts
+                    .and_then(|conn| conn.drop_query("SELECT LAST_INSERT_ID(0);"))
+                    .and_then(|conn| conn.batch_exec(insert_query, params))
                     .and_then(|conn| conn.query(new_media_query))
                     .and_then(move |results| {
                         results.reduce_and_drop(vec![], move |mut files: Vec<String>, row| {
