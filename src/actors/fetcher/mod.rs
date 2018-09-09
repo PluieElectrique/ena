@@ -142,6 +142,71 @@ impl Fetcher {
                     .map(move |body| (body, last_modified))
             })
     }
+
+    fn fetch_media(&mut self, board: Board, filename: String) {
+        let mut temp_path = self.media_path.clone();
+        temp_path.push(board.to_string());
+        temp_path.push("tmp");
+        std::fs::create_dir_all(&temp_path).unwrap();
+        temp_path.push(filename.to_string());
+
+        let mut real_path = self.media_path.clone();
+        real_path.push(board.to_string());
+        real_path.push(if filename.ends_with("s.jpg") {
+            "thumb"
+        } else {
+            "image"
+        });
+        real_path.push(&filename[0..4]);
+        real_path.push(&filename[4..6]);
+        std::fs::create_dir_all(&real_path).unwrap();
+        real_path.push(filename.to_string());
+
+        let uri = format!("{}/{}/{}", IMG_URI_PREFIX, board, filename)
+            .parse()
+            .unwrap_or_else(|err| {
+                panic!(
+                    "Could not parse URI from ({}, {}): {}",
+                    board, filename, err
+                );
+            });
+
+        let future = self.client.get(uri)
+            .from_err()
+            .join(tokio::fs::File::create(temp_path.clone()).from_err())
+            .and_then(move |(res, file)| match res.status() {
+                StatusCode::OK => future::ok((res, file)),
+                StatusCode::NOT_FOUND => future::err(FetchError::NotFound),
+                _ => future::err(res.status().into()),
+            })
+            .and_then(|(res, file)| {
+                res.into_body().from_err().fold(file, |file, chunk| {
+                    tokio::io::write_all(file, chunk)
+                        .from_err::<FetchError>()
+                        .map(|(file, _)| file)
+                })
+            }).and_then(move |_| {
+                if log_enabled!(Level::Debug) {
+                    debug!(
+                        "/{}/: Writing {}{}",
+                        board,
+                        if filename.ends_with("s.jpg") { "" } else { " " },
+                        filename
+                    );
+                }
+                tokio::fs::rename(temp_path, real_path).from_err()
+            })
+            // TODO: Retry request
+            .map_err(|err| log_error!(&err));
+
+        self.runtime.spawn(
+            self.media_rl_sender
+                .clone()
+                .send(Box::new(future))
+                .map(|_| ())
+                .map_err(|err| error!("{}", err)),
+        );
+    }
 }
 
 pub struct RateLimitedResponse<I, E> {
@@ -351,73 +416,13 @@ impl Handler<FetchArchive> for Fetcher {
 }
 
 #[derive(Debug, Message)]
-pub struct FetchMedia(pub Board, pub String);
-
-impl FetchMedia {
-    fn to_uri(&self) -> Uri {
-        format!("{}/{}/{}", IMG_URI_PREFIX, self.0, self.1)
-            .parse()
-            .unwrap_or_else(|err| {
-                panic!("Could not parse URI from {:?}: {}", self, err);
-            })
-    }
-}
+pub struct FetchMedia(pub Board, pub Vec<String>);
 
 impl Handler<FetchMedia> for Fetcher {
     type Result = ();
     fn handle(&mut self, msg: FetchMedia, _ctx: &mut Self::Context) {
-        let mut temp_path = self.media_path.clone();
-        temp_path.push(msg.0.to_string());
-        temp_path.push("tmp");
-        std::fs::create_dir_all(&temp_path).unwrap();
-        temp_path.push(msg.1.to_string());
-
-        let mut real_path = self.media_path.clone();
-        real_path.push(msg.0.to_string());
-        real_path.push(if msg.1.ends_with("s.jpg") {
-            "thumb"
-        } else {
-            "image"
-        });
-        real_path.push(&msg.1[0..4]);
-        real_path.push(&msg.1[4..6]);
-        std::fs::create_dir_all(&real_path).unwrap();
-        real_path.push(msg.1.to_string());
-
-        let future = self.client.get(msg.to_uri())
-            .from_err()
-            .join(tokio::fs::File::create(temp_path.clone()).from_err())
-            .and_then(move |(res, file)| match res.status() {
-                StatusCode::OK => future::ok((res, file)),
-                StatusCode::NOT_FOUND => future::err(FetchError::NotFound),
-                _ => future::err(res.status().into()),
-            })
-            .and_then(|(res, file)| {
-                res.into_body().from_err().fold(file, |file, chunk| {
-                    tokio::io::write_all(file, chunk)
-                        .from_err::<FetchError>()
-                        .map(|(file, _)| file)
-                })
-            }).and_then(move |_| {
-                if log_enabled!(Level::Debug) {
-                    debug!(
-                        "/{}/: Writing {}{}",
-                        msg.0,
-                        if msg.1.ends_with("s.jpg") { "" } else { " " },
-                        msg.1
-                    );
-                }
-                tokio::fs::rename(temp_path, real_path).from_err()
-            })
-            // TODO: Retry request
-            .map_err(|err| log_error!(&err));
-
-        self.runtime.spawn(
-            self.media_rl_sender
-                .clone()
-                .send(Box::new(future))
-                .map(|_| ())
-                .map_err(|err| error!("{}", err)),
-        );
+        for filename in msg.1 {
+            self.fetch_media(msg.0, filename);
+        }
     }
 }

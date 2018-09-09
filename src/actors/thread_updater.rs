@@ -3,7 +3,6 @@ use std::hash::Hasher;
 
 use actix::prelude::*;
 use chrono::prelude::*;
-use futures::future;
 use futures::prelude::*;
 use log::Level;
 use twox_hash::XxHash;
@@ -54,12 +53,9 @@ impl ThreadUpdater {
                     .map_err(|err| log_error!(&err))
                     .and_then(|res| res.map_err(|err| error!("{}", err)))
                     .and_then(move |filenames| {
-                        future::join_all(
-                            filenames
-                                .into_iter()
-                                .map(move |filename| fetcher.send(FetchMedia(board, filename))),
-                        ).map(|_| ())
-                        .map_err(|err| error!("{}", err))
+                        fetcher
+                            .send(FetchMedia(board, filenames))
+                            .map_err(|err| error!("{}", err))
                     }),
             );
         }
