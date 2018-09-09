@@ -23,6 +23,15 @@ const BOARD_SQL: &str = include_str!("../sql/boards.sql");
 const INDEX_COUNTERS_SQL: &str = include_str!("../sql/index_counters.sql");
 const TRIGGER_SQL: &str = include_str!("../sql/triggers.sql");
 
+// thread_nums is a temporary table created in Handler<GetUnarchivedThreads>
+const UNARCHIVED_THREAD_QUERY: &str = "SELECT thread_nums.num
+FROM thread_nums
+INNER JOIN `%%BOARD%%` ON `%%BOARD%%`.num = thread_nums.num
+WHERE
+    timestamp_expired = 0
+    AND deleted = 0
+    AND subnum = 0;";
+
 const INSERT_QUERY: &str = "INSERT INTO `%%BOARD%%` (num, subnum, thread_num, op, timestamp,
 timestamp_expired, preview_orig, preview_w, preview_h, media_filename, media_w, media_h, media_size,
 media_hash, media_orig, spoiler, capcode, name, trip, title, comment, sticky, locked, poster_hash,
@@ -125,6 +134,36 @@ impl Database {
 
 impl Actor for Database {
     type Context = Context<Self>;
+}
+
+pub struct GetUnarchivedThreads(pub Board, pub Vec<u64>);
+impl Message for GetUnarchivedThreads {
+    type Result = Result<Vec<u64>, my::errors::Error>;
+}
+
+impl Handler<GetUnarchivedThreads> for Database {
+    type Result = ResponseFuture<Vec<u64>, my::errors::Error>;
+
+    fn handle(&mut self, msg: GetUnarchivedThreads, _ctx: &mut Self::Context) -> Self::Result {
+        let params = msg.1.into_iter().map(|num| {
+            params! {
+                num,
+            }
+        });
+
+        let thread_query = UNARCHIVED_THREAD_QUERY.replace(BOARD_REPLACE, &msg.0.to_string());
+
+        Box::new(
+            self.pool
+                .get_conn()
+                .and_then(|conn| {
+                    conn.drop_query("CREATE TEMPORARY TABLE thread_nums (num int unsigned);")
+                }).and_then(|conn| conn.batch_exec("INSERT INTO thread_nums SET num = :num;", params))
+                .and_then(|conn| conn.query(thread_query))
+                .and_then(|result| result.collect_and_drop())
+                .map(|(_conn, nums)| nums),
+        )
+    }
 }
 
 pub struct InsertPosts(pub Board, pub Vec<Post>);
