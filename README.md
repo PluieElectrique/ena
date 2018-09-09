@@ -23,6 +23,8 @@ By default, only errors are logged. Logging is configured by setting the `RUST_L
 ### Scraping Mechanics
 
 * Existing posts in modified threads are only updated when the OP data, comment, or spoiler flag changes
+* On start, all live threads are fetched and updated, regardless of whether they've changed or not
+* On start, all archived threads are fetched and updated if they are not marked as archived in the database
 * Closed threads remain locked even after they are archived (In Asagi, closed threads are unlocked on the refetch after archival)
 * The `exif` column (a JSON blob of exif data, unique IPs, `since4pass`, and troll countries) is not used
 * The old media/thumbs directory structure is not supported

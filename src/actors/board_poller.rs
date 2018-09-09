@@ -7,9 +7,23 @@ use futures::prelude::*;
 use log::Level;
 use tokio::timer::Delay;
 
-use super::fetcher::{FetchError, FetchThreads, Fetcher};
+use super::fetcher::*;
 use super::ThreadUpdater;
 use four_chan::{Board, Thread};
+
+#[derive(Message)]
+pub struct ArchiveUpdate(pub Vec<u64>);
+
+#[derive(Message)]
+pub struct BoardUpdate(pub Vec<ThreadUpdate>, pub DateTime<Utc>);
+
+#[derive(Debug)]
+pub enum ThreadUpdate {
+    New(u64),
+    Modified(u64),
+    BumpedOff(u64),
+    Deleted(u64),
+}
 
 /// An actor which watches a board's threads and sends updates to a
 /// [`ThreadUpdater`](struct.ThreadUpdater.html)
@@ -25,6 +39,7 @@ impl Actor for BoardPoller {
     type Context = Context<Self>;
 
     fn started(&mut self, ctx: &mut Context<Self>) {
+        self.poll_archive(ctx);
         self.poll(ctx);
     }
 }
@@ -163,7 +178,7 @@ impl BoardPoller {
                 .timeout(self.interval, ())
                 .then(|res, act, ctx| {
                     if let Ok(res) = res {
-                        debug!("Fetched threads from /{}/", act.board);
+                        debug!("/{}/: Fetched threads", act.board);
                         match res {
                             Ok((threads, last_modified)) => {
                                 act.update_threads(threads, last_modified);
@@ -181,15 +196,26 @@ impl BoardPoller {
                 }),
         );
     }
-}
 
-#[derive(Message)]
-pub struct BoardUpdate(pub Vec<ThreadUpdate>, pub DateTime<Utc>);
-
-#[derive(Debug)]
-pub enum ThreadUpdate {
-    New(u64),
-    Modified(u64),
-    BumpedOff(u64),
-    Deleted(u64),
+    fn poll_archive(&self, ctx: &mut Context<Self>) {
+        ctx.spawn(
+            self.fetcher
+                .send(FetchArchive(self.board))
+                .map_err(|err| log_error!(&err))
+                .into_actor(self)
+                .map(|res, act, _ctx| {
+                    debug!("/{}/: Fetched archive", act.board);
+                    match res {
+                        Ok(threads) => Arbiter::spawn(
+                            act.thread_updater
+                                .send(ArchiveUpdate(threads))
+                                .map_err(|err| error!("{}", err)),
+                        ),
+                        Err(err) => error!("/{}/: Failed to fetch archive: {}", act.board, err),
+                    }
+                }).map_err(|err, act, _ctx| {
+                    error!("/{}/: Failed to fetch archive: {:?}", act.board, err)
+                }),
+        );
+    }
 }

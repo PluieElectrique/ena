@@ -7,7 +7,7 @@ use futures::prelude::*;
 use log::Level;
 use twox_hash::XxHash;
 
-use super::board_poller::{BoardUpdate, ThreadUpdate};
+use super::board_poller::*;
 use super::database::*;
 use super::fetcher::*;
 use four_chan::{self, Board, OpData, Post};
@@ -164,7 +164,7 @@ impl ThreadUpdater {
         self.remove_posts(deleted_posts, last_modified);
     }
 
-    fn process_thread(&self, no: u64, ctx: &mut <Self as Actor>::Context) {
+    fn process_thread(&self, no: u64, ctx: &mut <Self as Actor>::Context, handle_deleted: bool) {
         let future = self
             .fetcher
             .send(FetchThread(self.board, no))
@@ -204,8 +204,10 @@ impl ThreadUpdater {
                             "/{}/ No. {} was deleted before it could be processed",
                             act.board, no,
                         );
-                        act.thread_meta.remove(&no);
-                        act.remove_posts(vec![(no, RemovedStatus::Deleted)], Utc::now());
+                        if handle_deleted {
+                            act.thread_meta.remove(&no);
+                            act.remove_posts(vec![(no, RemovedStatus::Deleted)], Utc::now());
+                        }
                     }
                     _ => log_error!(&err),
                 },
@@ -223,13 +225,13 @@ impl Handler<BoardUpdate> for ThreadUpdater {
         use self::ThreadUpdate::*;
         for thread in msg.0 {
             match thread {
-                New(no) | Modified(no) => self.process_thread(no, ctx),
+                New(no) | Modified(no) => self.process_thread(no, ctx, true),
                 BumpedOff(no) => {
                     // If this thread isn't in the map, it's already been archived or deleted
                     if self.thread_meta.contains_key(&no) {
                         if self.board.is_archived() && self.refetch_archived_threads {
                             debug!("/{}/ No. {}: Bumped off, refetching", self.board, no);
-                            self.process_thread(no, ctx);
+                            self.process_thread(no, ctx, true);
                         } else {
                             debug!("/{}/ No. {}: Bumped off", self.board, no);
                             if self.board.is_archived() || self.always_add_archive_times {
@@ -249,6 +251,36 @@ impl Handler<BoardUpdate> for ThreadUpdater {
             }
         }
         self.remove_posts(removed_threads, msg.1);
+    }
+}
+
+impl Handler<ArchiveUpdate> for ThreadUpdater {
+    type Result = ();
+
+    fn handle(&mut self, msg: ArchiveUpdate, ctx: &mut Self::Context) {
+        ctx.spawn(
+            self.database
+                .send(GetUnarchivedThreads(self.board, msg.0))
+                .into_actor(self)
+                .map(|res, act, ctx| {
+                    match res {
+                        Ok(threads) => for no in threads {
+                            // We pass false for handle_deleted because if an archived thread 404's,
+                            // then it expired before we processed it, and was not deleted.
+                            act.process_thread(no, ctx, false);
+                        },
+                        Err(err) => error!(
+                            "/{}/: Failed to process archived threads: {}",
+                            act.board, err
+                        ),
+                    }
+                }).map_err(|err, act, _ctx| {
+                    error!(
+                        "/{}/: Failed to process archived threads: {}",
+                        act.board, err
+                    )
+                }),
+        );
     }
 }
 
