@@ -34,6 +34,7 @@ pub struct Fetcher {
     media_path: PathBuf,
     media_rl_sender: Sender<Box<Future<Item = (), Error = ()> + Send>>,
     thread_rl_sender: Sender<Box<Future<Item = (), Error = ()>>>,
+    thread_list_rl_sender: Sender<Box<Future<Item = (), Error = ()>>>,
     // Fetcher must use its own runtime because tokio::fs functions can't use the current_thread
     // runtime that Actix provides
     runtime: Runtime,
@@ -57,16 +58,23 @@ impl Fetcher {
         media_path: PathBuf,
         media_rl_config: &RateLimitingConfig,
         thread_rl_config: &RateLimitingConfig,
+        thread_list_rl_config: &RateLimitingConfig,
     ) -> Result<Self, Error> {
         let mut runtime = Runtime::new().unwrap();
         let https = HttpsConnector::new(2).context("Could not create HttpsConnector")?;
         let client = Client::builder().build::<_, Body>(https);
 
-        let (media_rl_sender, receiver) = mpsc::channel(150);
+        let (media_rl_sender, receiver) = mpsc::channel(500);
         runtime.spawn(Consume::new(RateLimiter::new(receiver, media_rl_config)));
 
-        let (thread_rl_sender, receiver) = mpsc::channel(150);
+        let (thread_rl_sender, receiver) = mpsc::channel(500);
         Arbiter::spawn(Consume::new(RateLimiter::new(receiver, thread_rl_config)));
+
+        let (thread_list_rl_sender, receiver) = mpsc::channel(200);
+        Arbiter::spawn(Consume::new(RateLimiter::new(
+            receiver,
+            thread_list_rl_config,
+        )));
 
         Ok(Self {
             client,
@@ -74,18 +82,9 @@ impl Fetcher {
             media_path,
             media_rl_sender,
             thread_rl_sender,
+            thread_list_rl_sender,
             runtime,
         })
-    }
-
-    fn new_thread_rl_response<I, E>(
-        &self,
-        future: Box<Future<Item = I, Error = E>>,
-    ) -> RateLimitedResponse<I, E> {
-        RateLimitedResponse {
-            sender: self.thread_rl_sender.clone(),
-            future,
-        }
     }
 
     fn fetch_with_last_modified<K: Into<FetchKey>>(
@@ -329,7 +328,10 @@ impl Handler<FetchThread> for Fetcher {
                     }
                 }),
         );
-        self.new_thread_rl_response(future)
+        RateLimitedResponse {
+            sender: self.thread_rl_sender.clone(),
+            future,
+        }
     }
 }
 
@@ -371,7 +373,10 @@ impl Handler<FetchThreads> for Fetcher {
                     }
                 }),
         );
-        self.new_thread_rl_response(future)
+        RateLimitedResponse {
+            sender: self.thread_list_rl_sender.clone(),
+            future,
+        }
     }
 }
 
@@ -411,7 +416,10 @@ impl Handler<FetchArchive> for Fetcher {
                     }
                 }),
         );
-        self.new_thread_rl_response(future)
+        RateLimitedResponse {
+            sender: self.thread_list_rl_sender.clone(),
+            future,
+        }
     }
 }
 

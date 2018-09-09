@@ -42,6 +42,7 @@ fn main() {
         config.media_path,
         &config.media_rate_limiting,
         &config.thread_rate_limiting,
+        &config.thread_list_rate_limiting,
     ).unwrap_or_else(|err| {
         log_error!(err.as_fail());
         process::exit(1);

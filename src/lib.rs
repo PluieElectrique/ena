@@ -89,6 +89,7 @@ pub struct Config {
     pub download_thumbs: bool,
     pub media_rate_limiting: RateLimitingConfig,
     pub thread_rate_limiting: RateLimitingConfig,
+    pub thread_list_rate_limiting: RateLimitingConfig,
     pub database_url: String,
     pub charset: String,
     pub media_path: PathBuf,
