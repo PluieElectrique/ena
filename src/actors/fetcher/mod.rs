@@ -146,8 +146,7 @@ impl Fetcher {
         let mut temp_path = self.media_path.clone();
         temp_path.push(board.to_string());
         temp_path.push("tmp");
-        std::fs::create_dir_all(&temp_path).unwrap();
-        temp_path.push(filename.to_string());
+        temp_path.push(&filename);
 
         let mut real_path = self.media_path.clone();
         real_path.push(board.to_string());
@@ -159,7 +158,9 @@ impl Fetcher {
         real_path.push(&filename[0..4]);
         real_path.push(&filename[4..6]);
         std::fs::create_dir_all(&real_path).unwrap();
-        real_path.push(filename.to_string());
+        real_path.push(&filename);
+
+        assert!(!real_path.exists());
 
         let uri = format!("{}/{}/{}", IMG_URI_PREFIX, board, filename)
             .parse()
@@ -429,6 +430,11 @@ pub struct FetchMedia(pub Board, pub Vec<String>);
 impl Handler<FetchMedia> for Fetcher {
     type Result = ();
     fn handle(&mut self, msg: FetchMedia, _ctx: &mut Self::Context) {
+        let mut temp_path = self.media_path.clone();
+        temp_path.push(msg.0.to_string());
+        temp_path.push("tmp");
+        std::fs::create_dir_all(&temp_path).unwrap();
+
         for filename in msg.1 {
             self.fetch_media(msg.0, filename);
         }
