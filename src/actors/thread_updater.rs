@@ -189,7 +189,7 @@ impl ThreadUpdater {
                             );
                         }
                     } else {
-                        debug!("/{}/ No. {}: Inserting new thread", act.board, no);
+                        debug!("/{}/ No. {}: Inserting thread", act.board, no);
                         act.insert_posts(thread);
                     }
 
@@ -264,11 +264,20 @@ impl Handler<ArchiveUpdate> for ThreadUpdater {
                 .into_actor(self)
                 .map(|res, act, ctx| {
                     match res {
-                        Ok(threads) => for no in threads {
-                            // We pass false for handle_deleted because if an archived thread 404's,
-                            // then it expired before we processed it, and was not deleted.
-                            act.process_thread(no, ctx, false);
-                        },
+                        Ok(threads) => {
+                            let len = threads.len();
+                            debug!(
+                                "/{}/: Inserting {} new archived thread{}",
+                                act.board,
+                                len,
+                                if len == 1 { "" } else { "s" },
+                            );
+                            for no in threads {
+                                // We pass false for handle_deleted because if an archived thread 404's,
+                                // then it expired before we processed it, and was not deleted.
+                                act.process_thread(no, ctx, false);
+                            }
+                        }
                         Err(err) => error!(
                             "/{}/: Failed to process archived threads: {}",
                             act.board, err

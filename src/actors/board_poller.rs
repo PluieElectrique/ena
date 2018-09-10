@@ -143,7 +143,7 @@ impl BoardPoller {
 
             let len = updates.len();
             debug!(
-                "Updating /{}/: {} thread{}{}{}{}{}",
+                "/{}/: Updating {} thread{}{}{}{}{}",
                 self.board,
                 len,
                 if len == 1 { "" } else { "s" },
@@ -178,14 +178,13 @@ impl BoardPoller {
                 .timeout(self.interval, ())
                 .then(|res, act, ctx| {
                     if let Ok(res) = res {
-                        debug!("/{}/: Fetched threads", act.board);
                         match res {
                             Ok((threads, last_modified)) => {
                                 act.update_threads(threads, last_modified);
                             }
                             Err(err) => match err {
                                 FetchError::NotModified => {}
-                                _ => error!("{}", err),
+                                _ => error!("/{}/: Failed to fetch threads: {}", act.board, err),
                             },
                         }
                     }
@@ -203,16 +202,22 @@ impl BoardPoller {
                 .send(FetchArchive(self.board))
                 .map_err(|err| log_error!(&err))
                 .into_actor(self)
-                .map(|res, act, _ctx| {
-                    debug!("/{}/: Fetched archive", act.board);
-                    match res {
-                        Ok(threads) => Arbiter::spawn(
+                .map(|res, act, _ctx| match res {
+                    Ok(threads) => {
+                        let len = threads.len();
+                        debug!(
+                            "/{}/: Fetched {} archived thread{}",
+                            act.board,
+                            len,
+                            if len == 1 { "" } else { "s" },
+                        );
+                        Arbiter::spawn(
                             act.thread_updater
                                 .send(ArchiveUpdate(threads))
                                 .map_err(|err| error!("{}", err)),
-                        ),
-                        Err(err) => error!("/{}/: Failed to fetch archive: {}", act.board, err),
+                        );
                     }
+                    Err(err) => error!("/{}/: Failed to fetch archive: {}", act.board, err),
                 }).map_err(|err, act, _ctx| {
                     error!("/{}/: Failed to fetch archive: {:?}", act.board, err)
                 }),
