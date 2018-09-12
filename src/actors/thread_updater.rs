@@ -171,9 +171,12 @@ impl ThreadUpdater {
             .map_err(|err| log_error!(&err))
             .into_actor(self)
             .map(move |res, act, _ctx| match res {
-                Ok((thread, last_modified)) => {
-                    let curr_meta = ThreadMetadata::from_thread(&thread, last_modified);
+                Ok((mut thread, last_modified)) => {
+                    // Sort ascending by no. The posts should already be sorted, but I have seen one
+                    // case where they weren't. So it's better to be safe.
+                    thread.sort_by(|a, b| a.no.cmp(&b.no));
 
+                    let curr_meta = ThreadMetadata::from_thread(&thread, last_modified);
                     if let Some(prev_meta) = act.thread_meta.remove(&no) {
                         if last_modified < prev_meta.last_modified {
                             error!(
