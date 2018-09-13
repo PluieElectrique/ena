@@ -175,15 +175,16 @@ impl Fetcher {
                 );
             });
 
-        let future = self.client.get(uri)
+        let future = self
+            .client
+            .get(uri)
             .from_err()
             .join(tokio::fs::File::create(temp_path.clone()).from_err())
             .and_then(move |(res, file)| match res.status() {
                 StatusCode::OK => future::ok((res, file)),
                 StatusCode::NOT_FOUND => future::err(FetchError::NotFound),
                 _ => future::err(res.status().into()),
-            })
-            .and_then(|(res, file)| {
+            }).and_then(|(res, file)| {
                 res.into_body().from_err().fold(file, |file, chunk| {
                     tokio::io::write_all(file, chunk)
                         .from_err::<FetchError>()
