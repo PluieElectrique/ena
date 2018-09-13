@@ -160,7 +160,10 @@ impl Fetcher {
         std::fs::create_dir_all(&real_path).unwrap();
         real_path.push(&filename);
 
-        assert!(!real_path.exists());
+        if real_path.exists() {
+            error!("/{}/: Media {} already exists!", board, filename);
+            return;
+        }
 
         let uri = format!("{}/{}/{}", IMG_URI_PREFIX, board, filename)
             .parse()
