@@ -43,13 +43,13 @@ impl ThreadUpdater {
         }
     }
 
-    fn insert_posts(&mut self, posts: Vec<Post>) {
+    fn insert_posts(&mut self, no: u64, posts: Vec<Post>) {
         if !posts.is_empty() {
             let board = self.board;
             let fetcher = self.fetcher.clone();
             Arbiter::spawn(
                 self.database
-                    .send(InsertPosts(self.board, posts))
+                    .send(InsertPosts(self.board, no, posts))
                     .map_err(|err| log_error!(&err))
                     .and_then(|res| res.map_err(|err| error!("{}", err)))
                     .and_then(move |filenames| {
@@ -159,7 +159,7 @@ impl ThreadUpdater {
             }
         }
 
-        self.insert_posts(new_posts);
+        self.insert_posts(no, new_posts);
         self.modify_posts(modified_posts);
         self.remove_posts(deleted_posts, last_modified);
     }
@@ -193,7 +193,7 @@ impl ThreadUpdater {
                         }
                     } else {
                         debug!("/{}/ No. {}: Inserting thread", act.board, no);
-                        act.insert_posts(thread);
+                        act.insert_posts(no, thread);
                     }
 
                     if !curr_meta.op_data.archived {
