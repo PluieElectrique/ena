@@ -183,21 +183,9 @@ impl ThreadUpdater {
                     // case where they weren't. So it's better to be safe.
                     thread.sort_by(|a, b| a.no.cmp(&b.no));
 
-                    let curr_meta = ThreadMetadata::from_thread(&thread, last_modified);
+                    let curr_meta = ThreadMetadata::from_thread(&thread);
                     if let Some(prev_meta) = act.thread_meta.remove(&no) {
-                        if last_modified < prev_meta.last_modified {
-                            error!(
-                                "/{}/ No. {} Ignoring old thread data: {} < {}",
-                                act.board, no, last_modified, prev_meta.last_modified
-                            );
-                        } else {
-                            act.process_modified(
-                                no,
-                                (thread, last_modified),
-                                &curr_meta,
-                                &prev_meta,
-                            );
-                        }
+                        act.process_modified(no, (thread, last_modified), &curr_meta, &prev_meta);
                     } else {
                         debug!("/{}/ No. {}: Inserting thread", act.board, no);
                         act.insert_posts(no, thread);
@@ -304,15 +292,13 @@ impl Handler<ArchiveUpdate> for ThreadUpdater {
 }
 
 struct ThreadMetadata {
-    last_modified: DateTime<Utc>,
     op_data: OpData,
     posts: Vec<PostMetadata>,
 }
 
 impl ThreadMetadata {
-    fn from_thread(thread: &[four_chan::Post], last_modified: DateTime<Utc>) -> Self {
+    fn from_thread(thread: &[four_chan::Post]) -> Self {
         Self {
-            last_modified,
             op_data: thread[0].op_data.clone(),
             posts: thread.iter().map(PostMetadata::from).collect(),
         }

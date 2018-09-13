@@ -137,7 +137,8 @@ impl Fetcher {
             }).and_then(move |(res, last_modified)| {
                 myself
                     .send(UpdateLastModified(key, last_modified))
-                    .then(|_| res.into_body().concat2().from_err())
+                    .from_err()
+                    .and_then(|_| res.into_body().concat2().from_err())
                     .map(move |body| (body, last_modified))
             })
     }
@@ -269,33 +270,41 @@ pub enum FetchError {
 
     #[fail(display = "IO error")]
     IoError(#[cause] std::io::Error),
+
+    #[fail(display = "Mailbox error: {}", _0)]
+    MailboxError(MailboxError),
 }
 impl_enum_from!(hyper::Error, FetchError, HyperError);
 impl_enum_from!(hyper::StatusCode, FetchError, BadStatus);
 impl_enum_from!(serde_json::Error, FetchError, JsonError);
 impl_enum_from!(tokio::timer::Error, FetchError, TimerError);
 impl_enum_from!(std::io::Error, FetchError, IoError);
+impl_enum_from!(MailboxError, FetchError, MailboxError);
 
 // We would like to return an ActorFuture from Fetcher, but we can't because ActorFutures can only
 // run on their own contexts. So, Fetcher must send a message to itself to update `last_modified`.
-#[derive(Message)]
 struct UpdateLastModified(FetchKey, DateTime<Utc>);
+impl Message for UpdateLastModified {
+    type Result = Result<(), FetchError>;
+}
 
 impl Handler<UpdateLastModified> for Fetcher {
-    type Result = ();
+    type Result = Result<(), FetchError>;
 
-    fn handle(&mut self, msg: UpdateLastModified, _ctx: &mut Self::Context) {
+    fn handle(&mut self, msg: UpdateLastModified, _ctx: &mut Self::Context) -> Self::Result {
         if self
             .last_modified
             .get(&msg.0)
             .map_or(true, |&dt| dt <= msg.1)
         {
             self.last_modified.insert(msg.0, msg.1);
+            Ok(())
         } else {
-            warn!(
+            error!(
                 "Ignoring older Last-Modified for {:?}: {} > {}",
                 msg.0, self.last_modified[&msg.0], msg.1
             );
+            Err(FetchError::NotModified)
         }
     }
 }
