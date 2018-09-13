@@ -23,7 +23,8 @@ const INDEX_COUNTERS_SQL: &str = include_str!("../sql/index_counters.sql");
 const TRIGGER_SQL: &str = include_str!("../sql/triggers.sql");
 
 // thread_nums is a temporary table created in Handler<GetUnarchivedThreads>
-const UNARCHIVED_THREAD_QUERY: &str = "SELECT thread_nums.num
+const UNARCHIVED_THREAD_QUERY: &str = "
+SELECT thread_nums.num
 FROM thread_nums
 INNER JOIN `%%BOARD%%` ON `%%BOARD%%`.num = thread_nums.num
 WHERE
@@ -39,10 +40,10 @@ WHERE
     AND subnum = 0
     AND thread_num = :thread_num;";
 
-const INSERT_QUERY: &str = "INSERT INTO `%%BOARD%%` (num, subnum, thread_num, op, timestamp,
-timestamp_expired, preview_orig, preview_w, preview_h, media_filename, media_w, media_h, media_size,
-media_hash, media_orig, spoiler, capcode, name, trip, title, comment, sticky, locked, poster_hash,
-poster_country)
+const INSERT_QUERY: &str = "
+INSERT INTO `%%BOARD%%` (num, subnum, thread_num, op, timestamp, timestamp_expired, preview_orig,
+preview_w, preview_h, media_filename, media_w, media_h, media_size, media_hash, media_orig, spoiler,
+capcode, name, trip, title, comment, sticky, locked, poster_hash, poster_country)
 VALUES (:num, :subnum, :thread_num, :op, :timestamp, :timestamp_expired, :preview_orig, :preview_w,
 :preview_h, :media_filename, :media_w, :media_h, :media_size, :media_hash, :media_orig, :spoiler,
 :capcode, :name, :trip, :title, :comment, :sticky, :locked, :poster_hash, :poster_country)
@@ -53,7 +54,8 @@ ON DUPLICATE KEY UPDATE
     comment = VALUES(comment),
     spoiler = VALUES(spoiler);";
 
-const NEW_MEDIA_QUERY: &str = "SELECT
+const NEW_MEDIA_QUERY: &str = "
+SELECT
     IF(media_orig = media, media_orig, NULL),
     preview_orig
 FROM `%%BOARD%%`
@@ -66,19 +68,23 @@ WHERE
     AND thread_num = :thread_num
     AND banned = 0;";
 
-const UPDATE_OP_QUERY: &str = "UPDATE `%%BOARD%%`
+const UPDATE_OP_QUERY: &str = "
+UPDATE `%%BOARD%%`
 SET sticky = :sticky, locked = :locked, timestamp_expired = :timestamp_expired
 WHERE num = :num AND subnum = 0";
 
-const UPDATE_OP_NO_LOCK_QUERY: &str = "UPDATE `%%BOARD%%`
+const UPDATE_OP_NO_LOCK_QUERY: &str = "
+UPDATE `%%BOARD%%`
 SET sticky = :sticky, timestamp_expired = :timestamp_expired
 WHERE num = :num AND subnum = 0";
 
-const UPDATE_POST_QUERY: &str = "UPDATE `%%BOARD%%`
+const UPDATE_POST_QUERY: &str = "
+UPDATE `%%BOARD%%`
 SET comment = :comment, spoiler = :spoiler
 WHERE num = :num AND subnum = 0";
 
-const MARK_REMOVED_QUERY: &str = "UPDATE `%%BOARD%%`
+const MARK_REMOVED_QUERY: &str = "
+UPDATE `%%BOARD%%`
 SET deleted = :deleted, timestamp_expired = :timestamp_expired
 WHERE num = :num AND subnum = 0";
 
