@@ -18,7 +18,7 @@ download_thumbs = true
 # Rate limiting for media and image files
 media_rate_limiting = { interval = 60, max_interval = 600, max_concurrent = 150 }
 # Rate limiting for individual threads
-thread_rate_limiting = { interval = 60, max_interval = 300, max_concurrent = 100 }
+thread_rate_limiting = { interval = 60, max_interval = 200, max_concurrent = 75 }
 # Rate limiting for threads.json and archive.json
 thread_list_rate_limiting = { interval = 60, max_interval = 180, max_concurrent = 50 }
 

@@ -44,7 +44,7 @@ impl Actor for Fetcher {
     type Context = Context<Self>;
 
     fn started(&mut self, ctx: &mut Self::Context) {
-        ctx.set_mailbox_capacity(200);
+        ctx.set_mailbox_capacity(500);
         // Clean up old Last-Modified values so that we don't leak memory
         ctx.run_interval(Duration::from_secs(86400), |act, _ctx| {
             let yesterday = Utc::now() - chrono::Duration::days(1);
@@ -64,7 +64,7 @@ impl Fetcher {
         let https = HttpsConnector::new(2).context("Could not create HttpsConnector")?;
         let client = Client::builder().build::<_, Body>(https);
 
-        let (media_rl_sender, receiver) = mpsc::channel(500);
+        let (media_rl_sender, receiver) = mpsc::channel(1000);
         runtime.spawn(Consume::new(RateLimiter::new(receiver, media_rl_config)));
 
         let (thread_rl_sender, receiver) = mpsc::channel(500);
