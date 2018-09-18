@@ -304,17 +304,17 @@ impl<W: Write> Serializer for HtmlSerializer<W> {
     }
 
     fn write_comment(&mut self, _text: &str) -> io::Result<()> {
-        error!("HTML serializer tried to write comment. Is input malformed?");
+        error!("HTML serializer tried to write comment");
         Ok(())
     }
 
     fn write_doctype(&mut self, _name: &str) -> io::Result<()> {
-        error!("HTML serializer tried to write doctype. Is input malformed?");
+        error!("HTML serializer tried to write doctype");
         Ok(())
     }
 
     fn write_processing_instruction(&mut self, _target: &str, _data: &str) -> io::Result<()> {
-        error!("HTML serializer tried to write processing instruction. Is input malformed?");
+        error!("HTML serializer tried to write processing instruction");
         Ok(())
     }
 }
