@@ -5,6 +5,7 @@ use html5ever::rcdom::RcDom;
 use html5ever::serialize::{AttrRef, Serialize, Serializer, TraversalScope};
 use html5ever::tendril::TendrilSink;
 use html5ever::{parse_fragment, QualName};
+use log::Level;
 use regex::Regex;
 
 use std::io::{self, Write};
@@ -21,6 +22,8 @@ lazy_static! {
     static ref GT_ENTITY: Regex = Regex::new(r"&gt;").unwrap();
     static ref LT_ENTITY: Regex = Regex::new(r"&lt;").unwrap();
     static ref QUOT_ENTITY: Regex = Regex::new(r"&quot;").unwrap();
+    static ref NUMERIC_CHARACTER_REFERENCE: Regex =
+        Regex::new(r"&#(?:x[[:xdigit:]]+|[[:digit:]]+);").unwrap();
 }
 
 /// Unescape a few HTML entities (only used on subjects and names). This is mainly for Asagi
@@ -33,6 +36,11 @@ pub fn unescape(input: &str) -> String {
     let input = GT_ENTITY.replace_all(&input, ">");
     let input = LT_ENTITY.replace_all(&input, "<");
     let input = QUOT_ENTITY.replace_all(&input, "\"");
+
+    if log_enabled!(Level::Warn) && NUMERIC_CHARACTER_REFERENCE.is_match(&input) {
+        warn!("String contains unexpected entities: {}", input);
+    }
+
     // It is very important that we replace the ampersand last. This way, we don't turn something
     // like `&amp;gt;` into `>`
     let input = AMP_ENTITY.replace_all(&input, "&");

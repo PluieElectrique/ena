@@ -33,6 +33,7 @@ By default, only errors are logged. Logging is configured by setting the `RUST_L
 
 ### Post/media processing
 
+* A fixed set of HTML character references are replaced in usernames and titles (Asagi also replaces all numeric character references of the form `&#\d+;`)
 * Unknown HTML tags are stripped from the output instead of being ignored
 * Posts are trimmed of whitespace (may cause blankposts to become empty, non-NULL strings)
 * Setting the group (`webserverGroup`) of downloaded media is currently not supported
