@@ -22,15 +22,11 @@ const BOARD_SQL: &str = include_str!("../sql/boards.sql");
 const INDEX_COUNTERS_SQL: &str = include_str!("../sql/index_counters.sql");
 const TRIGGER_SQL: &str = include_str!("../sql/triggers.sql");
 
-// thread_nums is a temporary table created in Handler<GetUnarchivedThreads>
+// archive_threads is a temporary table created in Handler<GetUnarchivedThreads>
 const UNARCHIVED_THREAD_QUERY: &str = "
-SELECT thread_nums.num
-FROM thread_nums
-INNER JOIN `%%BOARD%%` ON `%%BOARD%%`.num = thread_nums.num
-WHERE
-    timestamp_expired = 0
-    AND deleted = 0
-    AND subnum = 0;";
+DELETE archive_threads FROM archive_threads
+INNER JOIN `%%BOARD%%` ON id = num AND subnum = 0
+WHERE timestamp_expired != 0;";
 
 const NEXT_NUM_QUERY: &str = "
 SELECT COALESCE(MAX(num) + 1, :num_start)
@@ -147,9 +143,9 @@ impl Handler<GetUnarchivedThreads> for Database {
     type Result = ResponseFuture<Vec<u64>, my::errors::Error>;
 
     fn handle(&mut self, msg: GetUnarchivedThreads, _ctx: &mut Self::Context) -> Self::Result {
-        let params = msg.1.into_iter().map(|num| {
+        let params = msg.1.into_iter().map(|id| {
             params! {
-                num,
+                id,
             }
         });
 
@@ -159,11 +155,18 @@ impl Handler<GetUnarchivedThreads> for Database {
             self.pool
                 .get_conn()
                 .and_then(|conn| {
-                    conn.drop_query("CREATE TEMPORARY TABLE thread_nums (num int unsigned);")
-                }).and_then(|conn| conn.batch_exec("INSERT INTO thread_nums SET num = :num;", params))
-                .and_then(|conn| conn.query(thread_query))
+                    conn.drop_query("CREATE TEMPORARY TABLE archive_threads (id int unsigned);")
+                }).and_then(|conn| {
+                    conn.batch_exec("INSERT INTO archive_threads SET id = :id;", params)
+                }).and_then(|conn| conn.drop_query(thread_query))
+                .and_then(|conn| conn.query("SELECT id FROM archive_threads;"))
                 .and_then(|result| result.collect_and_drop())
-                .map(|(_conn, nums)| nums),
+                .and_then(|(conn, nums)| {
+                    // It seems the table persists and causes errors if the connection is reused, so
+                    // we drop it explicitly
+                    conn.drop_query("DROP TABLE archive_threads;")
+                        .map(|_conn| nums)
+                }),
         )
     }
 }
