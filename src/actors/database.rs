@@ -132,17 +132,6 @@ impl Database {
             download_thumbs,
         })
     }
-
-    fn adjust_timestamp(&self, utc_timestamp: u64) -> u64 {
-        if self.adjust_timestamps {
-            America::New_York
-                .timestamp(utc_timestamp as i64, 0)
-                .naive_local()
-                .timestamp() as u64
-        } else {
-            utc_timestamp
-        }
-    }
 }
 
 impl Actor for Database {
@@ -190,7 +179,8 @@ impl Handler<InsertPosts> for Database {
     fn handle(&mut self, msg: InsertPosts, _ctx: &mut Self::Context) -> Self::Result {
         let num_start = msg.2[0].no;
         let num_end = msg.2[msg.2.len() - 1].no;
-        let params: Vec<_> = msg.2.into_iter().map(|post| {
+        let adjust_timestamps = self.adjust_timestamps;
+        let params = msg.2.into_iter().map(move |post| {
             let mut params = params! {
                 "num" => post.no,
                 "subnum" => 0,
@@ -200,8 +190,8 @@ impl Handler<InsertPosts> for Database {
                     post.reply_to
                 },
                 "op" => post.reply_to == 0,
-                "timestamp" => self.adjust_timestamp(post.time),
-                "timestamp_expired" => post.op_data.archived_on.map_or(0, |t| self.adjust_timestamp(t)),
+                "timestamp" => post.time.adjust(adjust_timestamps),
+                "timestamp_expired" => post.op_data.archived_on.map_or(0, |t| t.adjust(adjust_timestamps)),
                 "capcode" => {
                     post.capcode.map_or(String::from("N"), |mut capcode| {
                         if capcode == "manager" {
@@ -255,7 +245,7 @@ impl Handler<InsertPosts> for Database {
             params.append(&mut image_params);
 
             params
-        }).collect();
+        });
 
         let next_num_query = NEXT_NUM_QUERY.replace(BOARD_REPLACE, &msg.0.to_string());
         let insert_query = INSERT_QUERY.replace(BOARD_REPLACE, &msg.0.to_string());
@@ -326,7 +316,7 @@ impl Handler<UpdateOp> for Database {
         let mut params = params! {
             "num" => msg.1,
             "sticky" => msg.2.sticky,
-            "timestamp_expired" => msg.2.archived_on.map_or(0, |t| self.adjust_timestamp(t)),
+            "timestamp_expired" => msg.2.archived_on.map_or(0, |t| t.adjust(self.adjust_timestamps)),
         };
 
         // Preserve the locked status of a thread by only updating it if it hasn't been archived yet
@@ -387,7 +377,7 @@ impl Handler<MarkPostsRemoved> for Database {
     type Result = ResponseFuture<(), my::errors::Error>;
 
     fn handle(&mut self, msg: MarkPostsRemoved, _ctx: &mut Self::Context) -> Self::Result {
-        let timestamp_expired = self.adjust_timestamp(msg.2.timestamp() as u64);
+        let timestamp_expired = msg.2.adjust(self.adjust_timestamps);
         let params = msg.1.into_iter().map(move |(no, status)| {
             params! {
                 "num" => no,
@@ -405,5 +395,34 @@ impl Handler<MarkPostsRemoved> for Database {
                 .and_then(|conn| conn.batch_exec(mark_removed_query, params))
                 .map(|_conn| ()),
         )
+    }
+}
+
+trait TimestampExt {
+    fn adjust(&self, adjust: bool) -> u64;
+}
+
+impl TimestampExt for u64 {
+    fn adjust(&self, adjust: bool) -> u64 {
+        if adjust {
+            America::New_York
+                .timestamp(*self as i64, 0)
+                .naive_local()
+                .timestamp() as u64
+        } else {
+            *self
+        }
+    }
+}
+
+impl TimestampExt for DateTime<Utc> {
+    fn adjust(&self, adjust: bool) -> u64 {
+        if adjust {
+            self.with_timezone(&America::New_York)
+                .naive_local()
+                .timestamp() as u64
+        } else {
+            self.timestamp() as u64
+        }
     }
 }
