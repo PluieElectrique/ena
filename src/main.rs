@@ -64,5 +64,6 @@ fn main() {
         ).start();
     }
 
+    info!("Ena is running");
     sys.run();
 }
