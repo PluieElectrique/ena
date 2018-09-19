@@ -413,6 +413,7 @@ impl FetchArchive {
 impl Handler<FetchArchive> for Fetcher {
     type Result = RateLimitedResponse<Vec<u64>, FetchError>;
     fn handle(&mut self, msg: FetchArchive, _ctx: &mut Self::Context) -> Self::Result {
+        assert!(msg.0.is_archived());
         let future = Box::new(
             self.client
                 .get(msg.to_uri())

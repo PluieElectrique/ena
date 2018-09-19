@@ -39,7 +39,9 @@ impl Actor for BoardPoller {
     type Context = Context<Self>;
 
     fn started(&mut self, ctx: &mut Context<Self>) {
-        self.poll_archive(ctx);
+        if self.board.is_archived() {
+            self.poll_archive(ctx);
+        }
         self.poll(ctx);
     }
 }
