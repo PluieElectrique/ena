@@ -1,5 +1,4 @@
 extern crate actix;
-#[macro_use]
 extern crate ena;
 extern crate failure;
 #[macro_use]
