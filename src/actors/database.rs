@@ -8,6 +8,7 @@
 use actix::prelude::*;
 use chrono::prelude::*;
 use chrono_tz::America;
+use futures::future;
 use futures::prelude::*;
 use my::prelude::*;
 use my::{self, Pool, Value};
@@ -101,24 +102,30 @@ impl Database {
         download_media: bool,
         download_thumbs: bool,
     ) -> Result<Self, my::errors::Error> {
-        let charset_board_sql = BOARD_SQL.replace(CHARSET_REPLACE, charset);
-
-        let mut init_sql = String::new();
-        for board in boards {
-            init_sql.push_str(&charset_board_sql.replace(BOARD_REPLACE, &board.to_string()));
-            init_sql.push_str(&TRIGGER_SQL.replace(BOARD_REPLACE, &board.to_string()));
-        }
+        let mut runtime = Runtime::new().unwrap();
 
         if create_index_counters {
-            init_sql.push_str(INDEX_COUNTERS_SQL);
+            runtime.block_on(
+                pool.get_conn()
+                    .and_then(|conn| conn.drop_query(INDEX_COUNTERS_SQL))
+                    .and_then(|conn| conn.disconnect()),
+            )?;
         }
 
-        let mut runtime = Runtime::new().unwrap();
-        runtime.block_on(
-            pool.get_conn()
-                .and_then(|conn| conn.drop_query(init_sql))
-                .and_then(|conn| conn.disconnect()),
-        )?;
+        runtime.block_on({
+            let boards = boards.to_owned();
+            let pool = pool.clone();
+            let board_sql = BOARD_SQL.replace(CHARSET_REPLACE, charset);
+            future::join_all(boards.into_iter().map(move |board| {
+                let mut init_sql = String::new();
+                init_sql.push_str(&board_sql.replace(BOARD_REPLACE, &board.to_string()));
+                init_sql.push_str(&TRIGGER_SQL.replace(BOARD_REPLACE, &board.to_string()));
+
+                pool.get_conn()
+                    .and_then(|conn| conn.drop_query(init_sql))
+                    .and_then(|conn| conn.disconnect())
+            }))
+        })?;
         runtime.shutdown_on_idle().wait().unwrap();
 
         Ok(Self {
