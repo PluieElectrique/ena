@@ -4,7 +4,7 @@ use html5ever::driver::ParseOpts;
 use html5ever::rcdom::RcDom;
 use html5ever::serialize::{AttrRef, Serialize, Serializer, TraversalScope};
 use html5ever::tendril::TendrilSink;
-use html5ever::{parse_fragment, QualName};
+use html5ever::{parse_fragment, LocalName, QualName};
 use log::Level;
 use regex::Regex;
 
@@ -17,11 +17,14 @@ use self::FourChanTag::*;
 lazy_static! {
     static ref FORTUNE_COLOR: Regex = Regex::new(r"color:#([[:xdigit:]]{3}{1,2})").unwrap();
     static ref BANNED_COLOR: Regex = Regex::new(r"color:\s*red").unwrap();
+    static ref AMP: Regex = Regex::new(r"&").unwrap();
     static ref AMP_ENTITY: Regex = Regex::new(r"&amp;").unwrap();
     static ref APOS_ENTITY: Regex = Regex::new(r"&#039;").unwrap();
     static ref GT_ENTITY: Regex = Regex::new(r"&gt;").unwrap();
     static ref LT_ENTITY: Regex = Regex::new(r"&lt;").unwrap();
+    static ref QUOT: Regex = Regex::new("\"").unwrap();
     static ref QUOT_ENTITY: Regex = Regex::new(r"&quot;").unwrap();
+    static ref NO_BREAK_SPACE: Regex = Regex::new("\u{00a0}").unwrap();
     static ref NUMERIC_CHARACTER_REFERENCE: Regex =
         Regex::new(r"&#(?:x[[:xdigit:]]+|[[:digit:]]+);").unwrap();
 }
@@ -74,7 +77,7 @@ pub fn clean(input: &str) -> io::Result<String> {
     Ok(string)
 }
 
-#[derive(PartialEq)]
+#[derive(Debug, PartialEq)]
 enum TagType {
     Start,
     End,
@@ -106,8 +109,8 @@ enum FourChanTag {
     /// Colored text on /qst/
     QstColor(Color),
     /// A tag which prints its text and children, but not its tags or attributes. This is used for
-    /// the root `<html>` element, the word break (`<wbr>`) tag, and any other unrecognized tag. It
-    /// is also added to the stack when there is a missing parent.
+    /// the root `<html>` element and the word break (`<wbr>`) tag. It is also added to the stack
+    /// when there is a missing parent.
     Quiet,
     /// `> implying`
     Quote,
@@ -121,6 +124,8 @@ enum FourChanTag {
     Superscript,
     /// The `<u>` tag
     Underline,
+    /// An unrecognized tag which is printed as-is. (Attributes may be reordered.)
+    Unknown(LocalName),
 }
 
 impl FourChanTag {
@@ -132,6 +137,13 @@ impl FourChanTag {
                 TagType::Start => return w.write_all(b"\n"),
                 TagType::End => return Ok(()),
             },
+            Unknown(name) => {
+                // start_elem handles printing the start tag so we don't have to copy the attributes
+                assert_eq!(tag_type, &TagType::End);
+                w.write_all(b"</")?;
+                w.write_all(name.as_bytes())?;
+                w.write_all(b">")?;
+            }
             _ => {}
         }
         w.write_all(b"[")?;
@@ -209,11 +221,12 @@ impl<W: Write> Serializer for HtmlSerializer<W> {
 
         let mut class = None;
         let mut style = None;
+        let mut other_attrs = vec![];
         for (name, value) in attrs {
             match name.local {
                 local_name!("class") => class = Some(value),
                 local_name!("style") => style = Some(value),
-                _ => {}
+                _ => other_attrs.push((name, value)),
             }
         }
 
@@ -238,28 +251,16 @@ impl<W: Write> Serializer for HtmlSerializer<W> {
                 (local_name!("span"), "mu-b") => QstColor(Blue),
                 (local_name!("span"), "quote") => Quote,
                 (local_name!("span"), "sjis") => ShiftJIS,
-                _ => {
-                    // We error here because this tag might be a new kind of formatting.
-                    error!("Unknown tag: <{} class='{}'>", name.local, class);
-                    Quiet
-                }
+                _ => Unknown(name.local.clone()),
             }
         } else if let Some(style) = style {
             match (&name.local, style) {
-                (local_name!("p"), _) => Quiet,
-                (local_name!("span"), _) => Quiet,
                 (local_name!("b"), style) | (local_name!("strong"), style)
                     if BANNED_COLOR.is_match(style) =>
                 {
                     Banned
                 }
-                _ => {
-                    // We only warn here because this tag is likely to be a one-off used in an
-                    // admin/mod sticky (e.g. <p>, <div>, <img>, etc), and not a new kind of
-                    // formatting.
-                    warn!("Unknown tag: <{} style='{}'>", name.local, style);
-                    Quiet
-                }
+                _ => Unknown(name.local.clone()),
             }
         } else {
             match name.local {
@@ -272,15 +273,46 @@ impl<W: Write> Serializer for HtmlSerializer<W> {
                 local_name!("sup") => Superscript,
                 local_name!("u") => Underline,
                 local_name!("wbr") => Quiet,
-                _ => {
-                    // See explanation above for why we only warn here.
-                    warn!("Unknown tag: <{}>", name.local);
-                    Quiet
-                }
+                _ => Unknown(name.local.clone()),
             }
         };
 
-        tag.write(&mut self.writer, &TagType::Start)?;
+        if let Unknown(name) = &tag {
+            fn escape_attribute(attr: &str) -> String {
+                let attr = AMP.replace_all(attr, "&amp;");
+                let attr = NO_BREAK_SPACE.replace_all(&attr, "&nbsp;");
+                let attr = QUOT.replace_all(&attr, "&quot;");
+                attr.to_string()
+            }
+
+            error!(
+                "Unrecognized tag: {}, class: {:?}, style: {:?}, other: {:?}",
+                name, class, style, other_attrs
+            );
+
+            self.writer.write_all(b"<")?;
+            self.writer.write_all(name.as_bytes())?;
+            if let Some(class) = class {
+                self.writer.write_all(b" class=\"")?;
+                self.writer.write_all(escape_attribute(class).as_bytes())?;
+                self.writer.write_all(b"\"")?;
+            }
+            if let Some(style) = style {
+                self.writer.write_all(b" style=\"")?;
+                self.writer.write_all(escape_attribute(style).as_bytes())?;
+                self.writer.write_all(b"\"")?;
+            }
+            for (name, value) in other_attrs {
+                self.writer.write_all(b" ")?;
+                self.writer.write_all(name.local.as_bytes())?;
+                self.writer.write_all(b"=\"")?;
+                self.writer.write_all(escape_attribute(value).as_bytes())?;
+                self.writer.write_all(b"\"")?;
+            }
+            self.writer.write_all(b">")?;
+        } else {
+            tag.write(&mut self.writer, &TagType::Start)?;
+        }
         self.stack.push(tag);
         Ok(())
     }

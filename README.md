@@ -34,8 +34,8 @@ By default, only errors are logged. Logging is configured by setting the `RUST_L
 ### Post/media processing
 
 * A fixed set of HTML character references are replaced in usernames and titles (Asagi also replaces all numeric character references of the form `&#\d+;`)
-* Unknown HTML tags are stripped from the output instead of being ignored
 * Posts are trimmed of whitespace (may cause blankposts to become empty, non-NULL strings)
+* Unknown HTML tags may have their attributes reordered
 * Setting the group (`webserverGroup`) of downloaded media is currently not supported
 * Media are only downloaded the first time they or the post they are in is seen. This means that if a thread is inserted and its media are queued to download, but the program crashes, on restart those media that didn't download will **never** be downloaded.
 
