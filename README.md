@@ -35,13 +35,14 @@ By default, only errors are logged. Logging is configured by setting the `RUST_L
 
 * All HTML is serialized as fragments according to the [HTML spec](https://html.spec.whatwg.org/multipage/parsing.html#serialising-html-fragments). This leads to more escapes (e.g. Ena produces `&gt;&gt;12345` whereas Asagi produces `>>12345`)
 * A fixed set of HTML character references are replaced in usernames and titles (Asagi also replaces all numeric character references of the form `&#\d+;`)
-* Posts are trimmed of whitespace (may cause blankposts to become empty, non-NULL strings)
 * Unknown HTML tags may have their attributes reordered
+* Posts are trimmed of trailing whitespace (may cause blankposts to become empty, non-NULL strings). Asagi trims whitespace from the start and end of each line
 * Setting the group (`webserverGroup`) of downloaded media is currently not supported
 * Media are only downloaded the first time they or the post they are in is seen. This means that if a thread is inserted and its media are queued to download, but the program crashes, on restart those media that didn't download will **never** be downloaded.
 
 ### Database
 
+* `media_filename` is not updated when existing posts are updated
 * PostgreSQL is not supported
 * The `%%BOARD%%_daily` and `%%BOARD%%_users` tables are not created
 
