@@ -29,6 +29,7 @@ By default, only errors are logged. Logging is configured by setting the `RUST_L
 * The `exif` column (a JSON blob of exif data, unique IPs, `since4pass`, and troll countries) is not used
 * The old media/thumbs directory structure is not supported
 * The "anchor thread" heuristic is used instead of the "page theshold" heuristic for determining when a thread was bumped off and when it was deleted
+* In ambiguous cases, removed threads are assumed to be bumped off and not deleted
 * When possible, the `timestamp_expired` for a deleted thread or post is taken from the `Last-Modified` header of the request, and not the time at which it was processed
 
 ### Post/media processing
@@ -47,6 +48,23 @@ By default, only errors are logged. Logging is configured by setting the `RUST_L
 * `media_filename` is not updated when existing posts are updated
 * PostgreSQL is not supported
 * The `%%BOARD%%_daily` and `%%BOARD%%_users` tables are not created
+
+## Known defects
+
+Ena strives to be an accurate scraper, but it isn't perfect.
+
+### Scraping mechanics
+
+* Requests are not retried. If a media request fails, the media will never be downloaded. If a thread request fails, data will be lost unless the thread is fetched again in the future and the request succeeds
+* Though the bumped off/deleted detection should be better than Asagi, it still has flaws: (If absolute accuracy is required a `HEAD` request could be sent for each thread)
+    * If `poll_interval` is too long or the scraped board moves too quickly, threads may not be marked correctly
+    * If the last _n_ threads from the catalog are deleted, they will be marked as bumped off
+
+### Data loss
+
+* Threads and posts deleted while Ena is stopped will not be marked as such when it restarts
+* If Ena crashes in the process of updating an archived thread, on restart the thread may be marked as "archived" even if the update never happened. Thus, changes between the last poll of the thread and the archival of it may be lost
+* As mentioned above, if Ena crashes while media are queued to download, on restart they will not be re-queued. Thus, they will never be downloaded
 
 ## Legal
 
