@@ -61,7 +61,7 @@ SELECT
 FROM `%%BOARD%%`
 INNER JOIN `%%BOARD%%_images` ON
     `%%BOARD%%`.media_id = `%%BOARD%%_images`.media_id
-    AND preview_orig in (preview_reply, preview_op)
+    AND preview_orig IN (preview_reply, preview_op)
 WHERE
     num BETWEEN :num_start AND :num_end
     AND subnum = 0
