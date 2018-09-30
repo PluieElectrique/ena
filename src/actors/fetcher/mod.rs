@@ -93,7 +93,9 @@ impl Fetcher {
         key: K,
         ctx: &Context<Self>,
     ) -> impl Future<Item = (hyper::Chunk, DateTime<Utc>), Error = FetchError> {
-        let mut request = hyper::Request::get(uri).body(Body::default()).unwrap();
+        let mut request = hyper::Request::get(uri.clone())
+            .body(Body::default())
+            .unwrap();
         let key = key.into();
         let myself = ctx.address();
 
@@ -111,7 +113,7 @@ impl Fetcher {
             .request(request)
             .from_err()
             .and_then(move |res| match res.status() {
-                StatusCode::NOT_FOUND => future::err(FetchError::NotFound),
+                StatusCode::NOT_FOUND => future::err(FetchError::NotFound(uri)),
                 StatusCode::NOT_MODIFIED => future::err(FetchError::NotModified),
                 StatusCode::OK => {
                     let new_modified = res
@@ -166,7 +168,7 @@ impl Fetcher {
             return;
         }
 
-        let uri = format!("{}/{}/{}", IMG_URI_PREFIX, board, filename)
+        let uri: Uri = format!("{}/{}/{}", IMG_URI_PREFIX, board, filename)
             .parse()
             .unwrap_or_else(|err| {
                 panic!(
@@ -177,12 +179,12 @@ impl Fetcher {
 
         let future = self
             .client
-            .get(uri)
+            .get(uri.clone())
             .from_err()
             .join(tokio::fs::File::create(temp_path.clone()).from_err())
             .and_then(move |(res, file)| match res.status() {
                 StatusCode::OK => future::ok((res, file)),
-                StatusCode::NOT_FOUND => future::err(FetchError::NotFound),
+                StatusCode::NOT_FOUND => future::err(FetchError::NotFound(uri)),
                 _ => future::err(res.status().into()),
             }).and_then(|(res, file)| {
                 res.into_body().from_err().fold(file, |file, chunk| {
@@ -260,8 +262,8 @@ pub enum FetchError {
     #[fail(display = "Resource not modified")]
     NotModified,
 
-    #[fail(display = "Resource not found")]
-    NotFound,
+    #[fail(display = "Resource not found: {}", _0)]
+    NotFound(Uri),
 
     #[fail(display = "API returned empty data")]
     EmptyData,

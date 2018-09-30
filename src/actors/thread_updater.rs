@@ -197,7 +197,7 @@ impl ThreadUpdater {
                 }
                 Err(err) => match err {
                     FetchError::NotModified => {}
-                    FetchError::NotFound => {
+                    FetchError::NotFound(_) => {
                         warn!(
                             "/{}/ No. {} was deleted before it could be processed",
                             act.board, no,
