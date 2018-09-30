@@ -2,7 +2,7 @@
 
 A 4chan scraper. Currently designed to be a (mostly) compatible replacement for Asagi.
 
-## Getting Started
+## Getting started
 
 Install and configure a MySQL-compatible database (tested on MariaDB 10.1). If you are running Ena with FoolFuuka, consider referring to the [instructions](https://wiki.bibanon.org/FoolFuuka) at the Bibliotheca Anonoma wiki.
 
@@ -20,7 +20,7 @@ By default, only errors are logged. Logging is configured by setting the `RUST_L
 
 [desuarchive's fork](https://github.com/desuarchive/asagi) is used as the reference for these comparisons.
 
-### Scraping Mechanics
+### Scraping mechanics
 
 * Existing posts in modified threads are only updated when the OP data, comment, or spoiler flag changes
 * On start, all live threads are fetched and updated, regardless of whether they've changed or not
