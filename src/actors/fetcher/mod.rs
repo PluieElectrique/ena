@@ -444,6 +444,10 @@ pub struct FetchMedia(pub Board, pub Vec<String>);
 impl Handler<FetchMedia> for Fetcher {
     type Result = ();
     fn handle(&mut self, msg: FetchMedia, _ctx: &mut Self::Context) {
+        if self.media_rl_sender.is_closed() {
+            panic!("Media sender is closed");
+        }
+
         let mut temp_path = self.media_path.clone();
         temp_path.push(msg.0.to_string());
         temp_path.push("tmp");
