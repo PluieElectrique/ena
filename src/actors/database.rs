@@ -57,7 +57,7 @@ ON DUPLICATE KEY UPDATE
 const NEW_MEDIA_QUERY: &str = "
 SELECT
     IF(media_orig = media, media_orig, NULL),
-    preview_orig
+    IF(preview_w = 0 AND preview_h = 0, NULL, preview_orig)
 FROM `%%BOARD%%`
 INNER JOIN `%%BOARD%%_images` ON
     `%%BOARD%%`.media_id = `%%BOARD%%_images`.media_id
@@ -307,7 +307,9 @@ impl Handler<InsertPosts> for Database {
                                 }
                             }
                             if download_thumbs {
-                                files.push(preview);
+                                if let Some(preview) = preview {
+                                    files.push(preview);
+                                }
                             }
                             files
                         })
