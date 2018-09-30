@@ -27,7 +27,9 @@ const TRIGGER_SQL: &str = include_str!("../sql/triggers.sql");
 const UNARCHIVED_THREAD_QUERY: &str = "
 DELETE archive_threads FROM archive_threads
 INNER JOIN `%%BOARD%%` ON id = num AND subnum = 0
-WHERE timestamp_expired != 0;";
+WHERE timestamp_expired != 0;
+DELETE archive_threads FROM archive_threads
+INNER JOIN `%%BOARD%%_deleted` ON id = num AND subnum = 0;";
 
 const NEXT_NUM_QUERY: &str = "
 SELECT COALESCE(MAX(num) + 1, :num_start)
@@ -41,9 +43,10 @@ const INSERT_QUERY: &str = "
 INSERT INTO `%%BOARD%%` (num, subnum, thread_num, op, timestamp, timestamp_expired, preview_orig,
 preview_w, preview_h, media_filename, media_w, media_h, media_size, media_hash, media_orig, spoiler,
 capcode, name, trip, title, comment, sticky, locked, poster_hash, poster_country)
-VALUES (:num, :subnum, :thread_num, :op, :timestamp, :timestamp_expired, :preview_orig, :preview_w,
+SELECT :num, :subnum, :thread_num, :op, :timestamp, :timestamp_expired, :preview_orig, :preview_w,
 :preview_h, :media_filename, :media_w, :media_h, :media_size, :media_hash, :media_orig, :spoiler,
-:capcode, :name, :trip, :title, :comment, :sticky, :locked, :poster_hash, :poster_country)
+:capcode, :name, :trip, :title, :comment, :sticky, :locked, :poster_hash, :poster_country
+WHERE NOT EXISTS (SELECT * FROM `%%BOARD%%_deleted` WHERE num in (:num, :thread_num) AND subnum = 0)
 ON DUPLICATE KEY UPDATE
     sticky = VALUES(sticky),
     locked = VALUES(locked),

@@ -42,6 +42,8 @@ By default, only errors are logged. Logging is configured by setting the `RUST_L
 
 ### Database
 
+* If the OP post of a thread is moved to the `%%BOARD%%_deleted` table, no new posts from that thread will be inserted
+* If a live thread is moved to the `%%BOARD%%_deleted` while Ena is running, Ena will continue to monitor it and produce errors while trying to update it. However, no data will actually be written
 * `media_filename` is not updated when existing posts are updated
 * PostgreSQL is not supported
 * The `%%BOARD%%_daily` and `%%BOARD%%_users` tables are not created
