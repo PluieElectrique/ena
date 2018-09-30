@@ -35,7 +35,9 @@ fn main() {
         error!("Database initialization error: {}", err);
         process::exit(1);
     });
-    let database = Arbiter::start(|_| database);
+    let database = Arbiter::builder()
+        .stop_system_on_panic(true)
+        .start(|_| database);
 
     let fetcher = Fetcher::new(
         config.media_path,
