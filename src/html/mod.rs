@@ -11,6 +11,8 @@ use regex::Regex;
 use std::io::{self, Write};
 use std::str;
 
+mod tests;
+
 use self::Color::*;
 use self::FourChanTag::*;
 
@@ -20,20 +22,20 @@ lazy_static! {
     static ref AMP: Regex = Regex::new(r"&").unwrap();
     static ref AMP_ENTITY: Regex = Regex::new(r"&amp;").unwrap();
     static ref APOS_ENTITY: Regex = Regex::new(r"&#039;").unwrap();
+    static ref GT: Regex = Regex::new(r">").unwrap();
     static ref GT_ENTITY: Regex = Regex::new(r"&gt;").unwrap();
+    static ref LT: Regex = Regex::new(r"<").unwrap();
     static ref LT_ENTITY: Regex = Regex::new(r"&lt;").unwrap();
     static ref QUOT: Regex = Regex::new("\"").unwrap();
     static ref QUOT_ENTITY: Regex = Regex::new(r"&quot;").unwrap();
-    static ref NO_BREAK_SPACE: Regex = Regex::new("\u{00a0}").unwrap();
+    static ref NO_BREAK_SPACE: Regex = Regex::new("\u{a0}").unwrap();
     static ref NUMERIC_CHARACTER_REFERENCE: Regex =
         Regex::new(r"&#(?:x[[:xdigit:]]+|[[:digit:]]+);").unwrap();
 }
 
-/// Unescape a few HTML entities (only used on subjects and names). This is mainly for Asagi
-/// database compatibility with names in the `users` table, since these characters get re-escaped by
-/// FoolFuuka anyways.
+/// Unescape HTML entities in subjects and names
 pub fn unescape(input: &str) -> String {
-    // Asagi does a general `&#dddd;` escape, but really the only character we need to worry about
+    // Asagi does a general `&#dddd;` escape, but the only character we should need to worry about
     // is the apostrophe.
     let input = APOS_ENTITY.replace_all(input, "'");
     let input = GT_ENTITY.replace_all(&input, ">");
@@ -44,8 +46,8 @@ pub fn unescape(input: &str) -> String {
         warn!("String contains unexpected entities: {}", input);
     }
 
-    // It is very important that we replace the ampersand last. This way, we don't turn something
-    // like `&amp;gt;` into `>`
+    // Since each replace scans the entire string from the previous replace, it is important that we
+    // replace the ampersand last. This way, we don't turn something like `&amp;gt;` into `>`
     let input = AMP_ENTITY.replace_all(&input, "&");
 
     input.to_string()
@@ -53,7 +55,7 @@ pub fn unescape(input: &str) -> String {
 
 // It's a bit heavy-handed to use an HTML parser to clean a few types of tags. But, it is more
 // versatile and reliable than regular expressions.
-/// Clean comment text by unescaping entities, converting tags to BBCode, and ignoring other tags
+/// Clean comments by unescaping some entities, converting tags to BBCode, and serializing other tags
 pub fn clean(input: &str) -> io::Result<String> {
     let mut sink = vec![];
 
@@ -71,7 +73,7 @@ pub fn clean(input: &str) -> io::Result<String> {
         html_elem.serialize(&mut ser, TraversalScope::ChildrenOnly(None))?;
     }
     let mut string = String::from_utf8(sink).unwrap();
-    // Remove trailing newlines from <br>'s before exif tables
+    // Remove trailing newlines from <br>'s before EXIF tables
     let len = string.trim_right().len();
     string.truncate(len);
     Ok(string)
@@ -109,8 +111,7 @@ enum FourChanTag {
     /// Colored text on /qst/
     QstColor(Color),
     /// A tag which prints its text and children, but not its tags or attributes. This is used for
-    /// the root `<html>` element and the word break (`<wbr>`) tag. It is also added to the stack
-    /// when there is a missing parent.
+    /// the root `<html>` element and is added to the stack when there is a missing parent.
     Quiet,
     /// `> implying`
     Quote,
@@ -126,13 +127,15 @@ enum FourChanTag {
     Underline,
     /// An unrecognized tag which is printed as-is. (Attributes may be reordered.)
     Unknown(LocalName),
+    /// The `<wbr>` tag
+    WordBreak,
 }
 
 impl FourChanTag {
     fn write<W: Write>(&self, w: &mut W, tag_type: &TagType) -> io::Result<()> {
         match self {
             // Tags that print nothing
-            Exif | Link | Quiet | Quote => return Ok(()),
+            Exif | Link | Quiet | Quote | WordBreak => return Ok(()),
             Break => match *tag_type {
                 TagType::Start => return w.write_all(b"\n"),
                 TagType::End => return Ok(()),
@@ -142,7 +145,7 @@ impl FourChanTag {
                 assert_eq!(tag_type, &TagType::End);
                 w.write_all(b"</")?;
                 w.write_all(name.as_bytes())?;
-                w.write_all(b">")?;
+                return w.write_all(b">");
             }
             _ => {}
         }
@@ -205,6 +208,20 @@ impl<W: Write> HtmlSerializer<W> {
             self.stack.push(FourChanTag::Quiet);
         }
         self.stack.last_mut().unwrap()
+    }
+}
+
+// https://html.spec.whatwg.org/multipage/parsing.html#escapingString
+fn escape_string(attr: &str, attr_mode: bool) -> String {
+    let attr = AMP.replace_all(attr, "&amp;");
+    let attr = NO_BREAK_SPACE.replace_all(&attr, "&nbsp;");
+    if attr_mode {
+        let attr = QUOT.replace_all(&attr, "&quot;");
+        attr.to_string()
+    } else {
+        let attr = LT.replace_all(&attr, "&lt;");
+        let attr = GT.replace_all(&attr, "&gt;");
+        attr.to_string()
     }
 }
 
@@ -272,19 +289,13 @@ impl<W: Write> Serializer for HtmlSerializer<W> {
                 local_name!("sub") => Subscript,
                 local_name!("sup") => Superscript,
                 local_name!("u") => Underline,
-                local_name!("wbr") => Quiet,
+                local_name!("wbr") => WordBreak,
                 _ => Unknown(name.local.clone()),
             }
         };
 
+        // https://html.spec.whatwg.org/multipage/parsing.html#serialising-html-fragments
         if let Unknown(name) = &tag {
-            fn escape_attribute(attr: &str) -> String {
-                let attr = AMP.replace_all(attr, "&amp;");
-                let attr = NO_BREAK_SPACE.replace_all(&attr, "&nbsp;");
-                let attr = QUOT.replace_all(&attr, "&quot;");
-                attr.to_string()
-            }
-
             error!(
                 "Unrecognized tag: {}, class: {:?}, style: {:?}, other: {:?}",
                 name, class, style, other_attrs
@@ -294,19 +305,22 @@ impl<W: Write> Serializer for HtmlSerializer<W> {
             self.writer.write_all(name.as_bytes())?;
             if let Some(class) = class {
                 self.writer.write_all(b" class=\"")?;
-                self.writer.write_all(escape_attribute(class).as_bytes())?;
+                self.writer
+                    .write_all(escape_string(class, true).as_bytes())?;
                 self.writer.write_all(b"\"")?;
             }
             if let Some(style) = style {
                 self.writer.write_all(b" style=\"")?;
-                self.writer.write_all(escape_attribute(style).as_bytes())?;
+                self.writer
+                    .write_all(escape_string(style, true).as_bytes())?;
                 self.writer.write_all(b"\"")?;
             }
             for (name, value) in other_attrs {
                 self.writer.write_all(b" ")?;
                 self.writer.write_all(name.local.as_bytes())?;
                 self.writer.write_all(b"=\"")?;
-                self.writer.write_all(escape_attribute(value).as_bytes())?;
+                self.writer
+                    .write_all(escape_string(value, true).as_bytes())?;
                 self.writer.write_all(b"\"")?;
             }
             self.writer.write_all(b">")?;
@@ -325,13 +339,56 @@ impl<W: Write> Serializer for HtmlSerializer<W> {
                 return Ok(());
             }
         };
+
+        if let Unknown(name) = &tag {
+            match name {
+                local_name!("area")
+                | local_name!("base")
+                | local_name!("basefont")
+                | local_name!("bgsound")
+                | local_name!("col")
+                | local_name!("embed")
+                | local_name!("frame")
+                | local_name!("hr")
+                | local_name!("img")
+                | local_name!("input")
+                | local_name!("keygen")
+                | local_name!("link")
+                | local_name!("meta")
+                | local_name!("param")
+                | local_name!("source")
+                | local_name!("track") => return Ok(()),
+                _ => {}
+            }
+        }
         tag.write(&mut self.writer, &TagType::End)
     }
 
+    // We don't support scripting so the text of <noscript> will always be escaped
     fn write_text(&mut self, text: &str) -> io::Result<()> {
-        match self.parent() {
-            Break | Exif => Ok(()),
-            _ => self.writer.write_all(text.as_bytes()),
+        if let Exif = self.parent() {
+            return Ok(());
+        }
+
+        let escape = if let Unknown(name) = self.parent() {
+            match name {
+                local_name!("style")
+                | local_name!("script")
+                | local_name!("xmp")
+                | local_name!("iframe")
+                | local_name!("noembed")
+                | local_name!("noframes")
+                | local_name!("plaintext") => false,
+                _ => true,
+            }
+        } else {
+            true
+        };
+
+        if escape {
+            self.writer.write_all(escape_string(text, false).as_bytes())
+        } else {
+            self.writer.write_all(text.as_bytes())
         }
     }
 
