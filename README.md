@@ -28,7 +28,7 @@ By default, only errors are logged. Logging is configured by setting the `RUST_L
 * Closed threads remain locked even after they are archived (In Asagi, closed threads are unlocked on the refetch after archival)
 * The `exif` column (a JSON blob of exif data, unique IPs, `since4pass`, and troll countries) is not used
 * The old media/thumbs directory structure is not supported
-* An improved bumped off/deleted algorithm
+* The "anchor thread" heuristic is used instead of the "page theshold" heuristic for determining when a thread was bumped off and when it was deleted
 * When possible, the `timestamp_expired` for a deleted thread or post is taken from the `Last-Modified` header of the request, and not the time at which it was processed
 
 ### Post/media processing

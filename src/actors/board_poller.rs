@@ -72,6 +72,10 @@ impl BoardPoller {
                 .threads
                 .iter()
                 .rev()
+                // We don't check that last_modified hasn't changed. This means there is a slight
+                // chance that the heuristic will fail when there is enough time between polls for
+                // the anchor to be bumped to the top and fall back to the bottom. But, boards
+                // usually aren't that fast and our poll interval is small, so this is unlikely.
                 .find(|thread| thread.no == last_no)
                 .map(|thread| thread.bump_index);
 
