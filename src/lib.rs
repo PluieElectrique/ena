@@ -1,3 +1,4 @@
+//! A 4chan scraper. Currently designed to be a (mostly) compatible, improved replacement for Asagi.
 extern crate actix;
 extern crate chrono;
 extern crate chrono_tz;

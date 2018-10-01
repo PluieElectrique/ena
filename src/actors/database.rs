@@ -83,6 +83,7 @@ UPDATE `%%BOARD%%`
 SET deleted = :deleted, timestamp_expired = :timestamp_expired
 WHERE num = :num AND subnum = 0";
 
+/// An actor which provides an interface to the MySQL database.
 pub struct Database {
     pool: Pool,
     adjust_timestamps: bool,

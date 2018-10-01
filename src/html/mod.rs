@@ -33,7 +33,7 @@ lazy_static! {
         Regex::new(r"&#(?:x[[:xdigit:]]+|[[:digit:]]+);").unwrap();
 }
 
-/// Unescape HTML entities in subjects and names
+/// Unescape HTML entities in subjects and names.
 pub fn unescape(input: &str) -> String {
     // Asagi does a general `&#dddd;` escape, but the only character we should need to worry about
     // is the apostrophe.
@@ -55,7 +55,7 @@ pub fn unescape(input: &str) -> String {
 
 // It's a bit heavy-handed to use an HTML parser to clean a few types of tags. But, it is more
 // versatile and reliable than regular expressions.
-/// Clean comments by unescaping some entities, converting tags to BBCode, and serializing other tags
+/// Clean comments by unescaping some entities, converting tags to BBCode, and serializing other tags.
 pub fn clean(input: &str) -> io::Result<String> {
     let mut sink = vec![];
 
@@ -92,7 +92,7 @@ enum Color {
 }
 
 enum FourChanTag {
-    /// (USER WAS BANNED FOR THIS POST)
+    /// (USER WAS BANNED/WARNED FOR THIS POST)
     Banned,
     /// `<b>` and `<span class="mu-s">` on /qst/
     Bold,
@@ -211,7 +211,9 @@ impl<W: Write> HtmlSerializer<W> {
     }
 }
 
-// https://html.spec.whatwg.org/multipage/parsing.html#escapingString
+/// Escape a string according to the
+/// [HTML spec](https://html.spec.whatwg.org/multipage/parsing.html#escapingString) for serializing
+/// fragments.
 fn escape_string(attr: &str, attr_mode: bool) -> String {
     let attr = AMP.replace_all(attr, "&amp;");
     let attr = NO_BREAK_SPACE.replace_all(&attr, "&nbsp;");
@@ -272,6 +274,7 @@ impl<W: Write> Serializer for HtmlSerializer<W> {
             }
         } else if let Some(style) = style {
             match (&name.local, style) {
+                // Using <b> for bans seems to be deprecated, but it's included for good measure
                 (local_name!("b"), style) | (local_name!("strong"), style)
                     if BANNED_COLOR.is_match(style) =>
                 {

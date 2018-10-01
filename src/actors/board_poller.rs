@@ -25,8 +25,8 @@ pub enum ThreadUpdate {
     Deleted(u64),
 }
 
-/// An actor which watches a board's threads and sends updates to a
-/// [`ThreadUpdater`](struct.ThreadUpdater.html)
+/// An actor which watches a board's threads and sends updates to its
+/// [`ThreadUpdater`](struct.ThreadUpdater.html).
 pub struct BoardPoller {
     board: Board,
     threads: Vec<Thread>,

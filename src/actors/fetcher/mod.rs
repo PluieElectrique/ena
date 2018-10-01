@@ -28,6 +28,8 @@ use RateLimitingConfig;
 
 const RFC_1123_FORMAT: &str = "%a, %d %b %Y %T GMT";
 
+/// An actor which fetches threads, thread lists, archives, and media from the 4chan API. Fetching
+/// the catalog or pages of a board or boards.json is not used and thus unsupported.
 pub struct Fetcher {
     client: Client<HttpsConnector<HttpConnector>>,
     last_modified: HashMap<FetchKey, DateTime<Utc>>,
@@ -35,8 +37,8 @@ pub struct Fetcher {
     media_rl_sender: Sender<Box<Future<Item = (), Error = ()> + Send>>,
     thread_rl_sender: Sender<Box<Future<Item = (), Error = ()>>>,
     thread_list_rl_sender: Sender<Box<Future<Item = (), Error = ()>>>,
-    // Fetcher must use its own runtime because tokio::fs functions can't use the current_thread
-    // runtime that Actix provides
+    // Fetcher must use its own runtime for fetching media because tokio::fs functions can't use the
+    // current_thread runtime that Actix provides
     runtime: Runtime,
 }
 

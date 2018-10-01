@@ -1,5 +1,3 @@
-//! 4chan's API. Not implemented: getting the page or catalog of a board or boards.json
-
 use std::fmt;
 
 use serde::{Deserialize, Deserializer};

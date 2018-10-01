@@ -1,6 +1,6 @@
 # Ena
 
-A 4chan scraper. Currently designed to be a (mostly) compatible replacement for Asagi.
+A 4chan scraper. Currently designed to be a (mostly) compatible, improved replacement for Asagi.
 
 ## Getting started
 
@@ -23,6 +23,7 @@ By default, only errors are logged. Logging is configured by setting the `RUST_L
 ### Scraping mechanics
 
 * Existing posts in modified threads are only updated when the OP data, comment, or spoiler flag changes
+* [xxHash](https://cyan4973.github.io/xxHash/) is used to check for comment differences instead of holding the comment in memory
 * On start, all live threads are fetched and updated, regardless of whether they've changed or not
 * On start, all archived threads are fetched and updated if they are not marked as archived in the database
 * Closed threads remain locked even after they are archived (In Asagi, closed threads are unlocked on the refetch after archival)
@@ -31,6 +32,7 @@ By default, only errors are logged. Logging is configured by setting the `RUST_L
 * The "anchor thread" heuristic is used instead of the "page threshold" heuristic for determining when a thread was bumped off and when it was deleted
 * In ambiguous cases, removed threads are assumed to be bumped off and not deleted
 * When possible, the `timestamp_expired` for a deleted thread or post is taken from the `Last-Modified` header of the request, and not the time at which it was processed
+* Bypassing the Cloudflare "I'm Under Attack Mode" JS challenge is not supported
 
 ### Post/media processing
 
