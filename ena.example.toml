@@ -4,7 +4,7 @@
 boards = [""]
 
 # Seconds to wait between fetching the threads.json of each board
-poll_interval = 30
+poll_interval = 60
 
 # Download full image/media files
 download_media = true
