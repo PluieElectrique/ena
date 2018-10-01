@@ -56,9 +56,8 @@ pub fn unescape(input: &str) -> String {
 // It's a bit heavy-handed to use an HTML parser to clean a few types of tags. But, it is more
 // versatile and reliable than regular expressions.
 /// Clean comments by unescaping some entities, converting tags to BBCode, and serializing other tags.
-pub fn clean(input: &str) -> io::Result<String> {
+pub fn clean(input: &str) -> io::Result<(String, Vec<String>)> {
     let mut sink = vec![];
-
     let parser = parse_fragment(
         // TODO: Is RcDom too inefficient?
         RcDom::default(),
@@ -66,17 +65,20 @@ pub fn clean(input: &str) -> io::Result<String> {
         QualName::new(None, ns!(html), local_name!("body")),
         vec![],
     );
-    {
+
+    let unknowns = {
         let dom = parser.one(input);
         let html_elem = &dom.document.children.borrow()[0];
         let mut ser = HtmlSerializer::new(&mut sink);
         html_elem.serialize(&mut ser, TraversalScope::ChildrenOnly(None))?;
-    }
+        ser.unknowns
+    };
+
     let mut string = String::from_utf8(sink).unwrap();
     // Remove trailing newlines from <br>'s before EXIF tables
     let len = string.trim_right().len();
     string.truncate(len);
-    Ok(string)
+    Ok((string, unknowns))
 }
 
 #[derive(Debug, PartialEq)]
@@ -192,6 +194,7 @@ impl FourChanTag {
 struct HtmlSerializer<W: Write> {
     writer: W,
     stack: Vec<FourChanTag>,
+    unknowns: Vec<String>,
 }
 
 impl<W: Write> HtmlSerializer<W> {
@@ -199,6 +202,7 @@ impl<W: Write> HtmlSerializer<W> {
         HtmlSerializer {
             writer,
             stack: vec![FourChanTag::Quiet],
+            unknowns: vec![],
         }
     }
 
@@ -245,7 +249,7 @@ impl<W: Write> Serializer for HtmlSerializer<W> {
             match name.local {
                 local_name!("class") => class = Some(value),
                 local_name!("style") => style = Some(value),
-                _ => other_attrs.push((name, value)),
+                _ => other_attrs.push((name.local.to_string(), value)),
             }
         }
 
@@ -299,10 +303,13 @@ impl<W: Write> Serializer for HtmlSerializer<W> {
 
         // https://html.spec.whatwg.org/multipage/parsing.html#serialising-html-fragments
         if let Unknown(name) = &tag {
-            error!(
-                "Unrecognized tag: {}, class: {:?}, style: {:?}, other: {:?}",
-                name, class, style, other_attrs
-            );
+            self.unknowns.push(format!(
+                "<{} {}{}other={:?}>",
+                name,
+                class.map_or(String::from(""), |class| format!("class='{}' ", class)),
+                style.map_or(String::from(""), |style| format!("style='{}' ", style)),
+                other_attrs,
+            ));
 
             self.writer.write_all(b"<")?;
             self.writer.write_all(name.as_bytes())?;
@@ -320,7 +327,7 @@ impl<W: Write> Serializer for HtmlSerializer<W> {
             }
             for (name, value) in other_attrs {
                 self.writer.write_all(b" ")?;
-                self.writer.write_all(name.local.as_bytes())?;
+                self.writer.write_all(name.as_bytes())?;
                 self.writer.write_all(b"=\"")?;
                 self.writer
                     .write_all(escape_string(value, true).as_bytes())?;
