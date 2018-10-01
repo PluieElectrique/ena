@@ -52,7 +52,7 @@ ON DUPLICATE KEY UPDATE
 const NEW_MEDIA_QUERY: &str = "
 SELECT
     IF(media_orig = media, media_orig, NULL),
-    IF(preview_w = 0 AND preview_h = 0, NULL, preview_orig)
+    preview_orig
 FROM `%%BOARD%%`
 INNER JOIN `%%BOARD%%_images` ON
     `%%BOARD%%`.media_id = `%%BOARD%%_images`.media_id
@@ -241,7 +241,11 @@ impl Handler<InsertPosts> for Database {
                     "media_h" => image.image_height,
                     "media_size" => image.filesize,
                     "media_hash" => image.md5,
-                    "preview_orig" => format!("{}s.jpg", image.time_millis),
+                    "preview_orig" => if image.thumbnail_width == 0 && image.thumbnail_height == 0 {
+                        None
+                    } else {
+                        Some(format!("{}s.jpg", image.time_millis))
+                    },
                     "preview_w" => image.thumbnail_width,
                     "preview_h" => image.thumbnail_height,
                     "spoiler" => image.spoiler,
