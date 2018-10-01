@@ -34,6 +34,7 @@ By default, only errors are logged. Logging is configured by setting the `RUST_L
 
 ### Post/media processing
 
+* More tags (like `[sjis]` and `[qstcolor]`) are supported
 * All HTML is serialized as fragments according to the [HTML spec](https://html.spec.whatwg.org/multipage/parsing.html#serialising-html-fragments). This leads to more escapes (e.g. Ena produces `&gt;&gt;12345` whereas Asagi produces `>>12345`)
 * A fixed set of HTML character references are replaced in usernames and titles (In addition to the references Ena replaces, Asagi also replaces all numeric character references of the form `&#\d+;`)
 * Unknown HTML tags may have their attributes reordered

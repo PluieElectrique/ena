@@ -224,7 +224,7 @@ impl Handler<InsertPosts> for Database {
                 // We only want to mark threads as locked if they are closed before being archived.
                 // This is because all archived threads are marked as closed.
                 "locked" => post.op_data.closed && !post.op_data.archived,
-                "poster_hash" => post.id,
+                "poster_hash" => post.id.map(|id| if id == "Developer" { String::from("Dev") } else { id }),
                 "poster_country" => post.country,
             };
 
