@@ -57,18 +57,6 @@ macro_rules! log_error {
         error!("{}", pretty);
     }};
 }
-#[macro_export]
-macro_rules! log_warn {
-    ($fail:expr) => {{
-        let fail: &::failure::Fail = $fail;
-        let mut pretty = fail.to_string();
-        for cause in fail.iter_causes() {
-            pretty.push_str(": ");
-            pretty.push_str(&cause.to_string());
-        }
-        warn!("{}", pretty);
-    }};
-}
 
 pub mod actors;
 pub mod four_chan;
