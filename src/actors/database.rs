@@ -1,10 +1,3 @@
-//! Asagi schema notes (the following only applies to scraped posts):
-//!   * `media_id` is set by triggers
-//!   * `poster_ip` and `subnum` (used for ghost posts?) are always 0
-//!   * `email` and `delpass` are always `NULL`
-//!   * Timestamps are "adjusted" to America/New_York if the `adjust_timestamps` settings is on
-//!   * Asagi scrapes `exif`, but we currently don't since it doesn't seem necessary
-
 use actix::prelude::*;
 use chrono::prelude::*;
 use chrono_tz::America;
@@ -39,6 +32,8 @@ WHERE
     AND subnum = 0
     AND thread_num = :thread_num;";
 
+// Columns missing from this query like media_id, poster_ip, email, delpass, and exif are either
+// always set to their defaults, set by triggers, or unused by Ena
 const INSERT_QUERY: &str = "
 INSERT INTO `%%BOARD%%` (num, subnum, thread_num, op, timestamp, timestamp_expired, preview_orig,
 preview_w, preview_h, media_filename, media_w, media_h, media_size, media_hash, media_orig, spoiler,
@@ -196,6 +191,7 @@ impl Handler<InsertPosts> for Database {
         let params = msg.2.into_iter().map(move |post| {
             let mut params = params! {
                 "num" => post.no,
+                // subnum is used for ghost posts. All scraped posts have a subnum of 0.
                 "subnum" => 0,
                 "thread_num" => if post.reply_to == 0 {
                     post.no
@@ -204,7 +200,9 @@ impl Handler<InsertPosts> for Database {
                 },
                 "op" => post.reply_to == 0,
                 "timestamp" => post.time.adjust(adjust_timestamps),
-                "timestamp_expired" => post.op_data.archived_on.map_or(0, |t| t.adjust(adjust_timestamps)),
+                "timestamp_expired" => post.op_data.archived_on.map_or(
+                    0, |t| t.adjust(adjust_timestamps)
+                ),
                 "capcode" => {
                     post.capcode.map_or(String::from("N"), |mut capcode| {
                         if capcode == "manager" {
@@ -224,7 +222,13 @@ impl Handler<InsertPosts> for Database {
                 // We only want to mark threads as locked if they are closed before being archived.
                 // This is because all archived threads are marked as closed.
                 "locked" => post.op_data.closed && !post.op_data.archived,
-                "poster_hash" => post.id.map(|id| if id == "Developer" { String::from("Dev") } else { id }),
+                "poster_hash" => post.id.map(|id| if id == "Developer" {
+                    String::from("Dev")
+                } else {
+                    id
+                }),
+                // NOTE: Asagi ignores the "XX" and "A1" flags, but why? Should we? For what it's
+                // worth, they aren't in boards.json.
                 "poster_country" => post.country,
             };
 
