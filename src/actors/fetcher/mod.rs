@@ -1,6 +1,7 @@
 use std;
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::Duration;
 
 use actix::dev::{MessageResponse, ResponseChannel};
@@ -13,7 +14,7 @@ use futures::prelude::*;
 use futures::sync::mpsc::{self, Sender};
 use hyper::client::{Client, HttpConnector};
 use hyper::header::{self, HeaderValue};
-use hyper::{self, Body, StatusCode, Uri};
+use hyper::{self, Body, Request, StatusCode, Uri};
 use hyper_tls::HttpsConnector;
 use log::Level;
 use serde_json;
@@ -31,7 +32,7 @@ const RFC_1123_FORMAT: &str = "%a, %d %b %Y %T GMT";
 /// An actor which fetches threads, thread lists, archives, and media from the 4chan API. Fetching
 /// the catalog or pages of a board or boards.json is not used and thus unsupported.
 pub struct Fetcher {
-    client: Client<HttpsConnector<HttpConnector>>,
+    client: Arc<Client<HttpsConnector<HttpConnector>>>,
     last_modified: HashMap<FetchKey, DateTime<Utc>>,
     media_path: PathBuf,
     media_rl_sender: Sender<Box<Future<Item = (), Error = ()> + Send>>,
@@ -64,7 +65,7 @@ impl Fetcher {
     ) -> Result<Self, Error> {
         let mut runtime = Runtime::new().unwrap();
         let https = HttpsConnector::new(2).context("Could not create HttpsConnector")?;
-        let client = Client::builder().build::<_, Body>(https);
+        let client = Arc::new(Client::builder().build::<_, Body>(https));
 
         let (media_rl_sender, receiver) = mpsc::channel(1000);
         runtime.spawn(Consume::new(RateLimiter::new(receiver, media_rl_config)));
@@ -95,9 +96,7 @@ impl Fetcher {
         key: K,
         ctx: &Context<Self>,
     ) -> impl Future<Item = (hyper::Chunk, DateTime<Utc>), Error = FetchError> {
-        let mut request = hyper::Request::get(uri.clone())
-            .body(Body::default())
-            .unwrap();
+        let mut request = Request::get(uri.clone()).body(Body::default()).unwrap();
         let key = key.into();
         let myself = ctx.address();
 
@@ -106,13 +105,17 @@ impl Fetcher {
             .get(&key)
             .cloned()
             .unwrap_or_else(|| Utc.timestamp(1_065_062_160, 0));
-        request.headers_mut().insert(
-            header::IF_MODIFIED_SINCE,
-            HeaderValue::from_str(last_modified.format(RFC_1123_FORMAT).to_string().as_str())
-                .unwrap(),
-        );
-        self.client
-            .request(request)
+        {
+            let headers = request.headers_mut();
+            headers.reserve(1);
+            headers.insert(
+                header::IF_MODIFIED_SINCE,
+                HeaderValue::from_str(last_modified.format(RFC_1123_FORMAT).to_string().as_str())
+                    .unwrap(),
+            );
+        }
+        let client = self.client.clone();
+        future::lazy(move || client.request(request))
             .from_err()
             .and_then(move |res| match res.status() {
                 StatusCode::NOT_FOUND => future::err(FetchError::NotFound(uri)),
@@ -179,9 +182,9 @@ impl Fetcher {
                 );
             });
 
-        let future = self
-            .client
-            .get(uri.clone())
+        let client = self.client.clone();
+        let request = Request::get(uri.clone()).body(Body::default()).unwrap();
+        let future = future::lazy(move || client.request(request))
             .from_err()
             .join(tokio::fs::File::create(temp_path.clone()).from_err())
             .and_then(move |(res, file)| match res.status() {
@@ -418,9 +421,10 @@ impl Handler<FetchArchive> for Fetcher {
     type Result = RateLimitedResponse<Vec<u64>, FetchError>;
     fn handle(&mut self, msg: FetchArchive, _ctx: &mut Self::Context) -> Self::Result {
         assert!(msg.0.is_archived());
+        let client = self.client.clone();
+        let request = Request::get(msg.to_uri()).body(Body::default()).unwrap();
         let future = Box::new(
-            self.client
-                .get(msg.to_uri())
+            future::lazy(move || client.request(request))
                 .from_err()
                 .and_then(move |res| match res.status() {
                     StatusCode::OK => future::ok(res),
