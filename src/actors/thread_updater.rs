@@ -209,7 +209,7 @@ impl ThreadUpdater {
                             act.remove_posts(vec![(no, RemovedStatus::Deleted)], Utc::now());
                         }
                     }
-                    _ => log_error!(&err),
+                    _ => error!("/{}/ No. {} fetch failed: {}", act.board, no, err),
                 },
             });
         ctx.spawn(future);

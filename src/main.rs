@@ -15,6 +15,7 @@ use ena::*;
 
 fn main() {
     pretty_env_logger::init();
+    info!("Ena is starting");
 
     let config = parse_config().unwrap_or_else(|err| {
         log_error!(err.as_fail());

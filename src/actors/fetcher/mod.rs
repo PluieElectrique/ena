@@ -151,6 +151,8 @@ impl Fetcher {
     }
 
     fn fetch_media(&mut self, board: Board, filename: String) {
+        let is_thumb = filename.ends_with("s.jpg");
+
         let mut temp_path = self.media_path.clone();
         temp_path.push(board.to_string());
         temp_path.push("tmp");
@@ -158,11 +160,7 @@ impl Fetcher {
 
         let mut real_path = self.media_path.clone();
         real_path.push(board.to_string());
-        real_path.push(if filename.ends_with("s.jpg") {
-            "thumb"
-        } else {
-            "image"
-        });
+        real_path.push(if is_thumb { "thumb" } else { "image" });
         real_path.push(&filename[0..4]);
         real_path.push(&filename[4..6]);
         std::fs::create_dir_all(&real_path).unwrap();
@@ -202,14 +200,14 @@ impl Fetcher {
                     debug!(
                         "/{}/: Writing {}{}",
                         board,
-                        if filename.ends_with("s.jpg") { "" } else { " " },
+                        if is_thumb { "" } else { " " },
                         filename
                     );
                 }
                 tokio::fs::rename(temp_path, real_path).from_err()
             })
             // TODO: Retry request
-            .map_err(|err| log_error!(&err));
+            .map_err(move |err| error!("/{}/: Failed to fetch media: {}", board, err));
 
         self.runtime.spawn(
             self.media_rl_sender
