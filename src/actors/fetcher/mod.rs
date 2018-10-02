@@ -252,14 +252,14 @@ impl_enum_from!(FetchThreads, FetchKey, Threads);
 
 #[derive(Debug, Fail)]
 pub enum FetchError {
-    #[fail(display = "Hyper error")]
-    HyperError(#[cause] hyper::Error),
+    #[fail(display = "Hyper error: {}", _0)]
+    HyperError(hyper::Error),
 
     #[fail(display = "Bad status: {}", _0)]
     BadStatus(hyper::StatusCode),
 
-    #[fail(display = "JSON error")]
-    JsonError(#[cause] serde_json::Error),
+    #[fail(display = "JSON error: {}", _0)]
+    JsonError(serde_json::Error),
 
     #[fail(display = "Resource not modified")]
     NotModified,
@@ -270,11 +270,11 @@ pub enum FetchError {
     #[fail(display = "API returned empty data")]
     EmptyData,
 
-    #[fail(display = "Timer error")]
-    TimerError(#[cause] tokio::timer::Error),
+    #[fail(display = "Timer error: {}", _0)]
+    TimerError(tokio::timer::Error),
 
-    #[fail(display = "IO error")]
-    IoError(#[cause] std::io::Error),
+    #[fail(display = "IO error: {}", _0)]
+    IoError(std::io::Error),
 
     #[fail(display = "Mailbox error: {}", _0)]
     MailboxError(MailboxError),
