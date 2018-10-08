@@ -283,7 +283,8 @@ impl Handler<ArchiveUpdate> for ThreadUpdater {
                             act.board, err
                         ),
                     }
-                }).map_err(|err, act, _ctx| {
+                })
+                .map_err(|err, act, _ctx| {
                     error!(
                         "/{}/: Failed to process archived threads: {}",
                         act.board, err

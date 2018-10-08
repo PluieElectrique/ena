@@ -81,11 +81,13 @@ impl BoardPoller {
 
             move |thread: &Thread, updates: &mut Vec<_>| {
                 match anchor_index {
-                    Some(anchor) => if thread.bump_index < anchor {
-                        updates.push(Deleted(thread.no));
-                    } else {
-                        updates.push(BumpedOff(thread.no));
-                    },
+                    Some(anchor) => {
+                        if thread.bump_index < anchor {
+                            updates.push(Deleted(thread.no));
+                        } else {
+                            updates.push(BumpedOff(thread.no));
+                        }
+                    }
                     None => {
                         // If all of the threads have changed, we have no information and can't
                         // assume that any thread was deleted

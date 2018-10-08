@@ -189,13 +189,15 @@ impl Fetcher {
                 StatusCode::OK => future::ok((res, file)),
                 StatusCode::NOT_FOUND => future::err(FetchError::NotFound(uri)),
                 _ => future::err(res.status().into()),
-            }).and_then(|(res, file)| {
+            })
+            .and_then(|(res, file)| {
                 res.into_body().from_err().fold(file, |file, chunk| {
                     tokio::io::write_all(file, chunk)
                         .from_err::<FetchError>()
                         .map(|(file, _)| file)
                 })
-            }).and_then(move |_| {
+            })
+            .and_then(move |_| {
                 if log_enabled!(Level::Debug) {
                     debug!(
                         "/{}/: Writing {}{}",
