@@ -186,11 +186,12 @@ impl Handler<InsertPosts> for Database {
     type Result = ResponseFuture<Vec<String>, my::errors::Error>;
 
     fn handle(&mut self, msg: InsertPosts, _ctx: &mut Self::Context) -> Self::Result {
-        let InsertPosts(board, no, _) = msg;
+        let board = msg.0;
         let num_start = msg.2[0].no;
         let num_end = msg.2[msg.2.len() - 1].no;
         let adjust_timestamps = self.adjust_timestamps;
         let params = msg.2.into_iter().map(move |post| {
+            let no = post.no;
             let mut params = params! {
                 "num" => post.no,
                 // subnum is used for ghost posts. All scraped posts have a subnum of 0.
@@ -216,22 +217,10 @@ impl Handler<InsertPosts> for Database {
                         }
                     })
                 },
-                "name" => post.name.map(|name| html::unescape(&name)),
+                "name" => post.name.map(|name| html::unescape(name, Some((board, no)))),
                 "trip" => post.trip,
-                "title" => post.subject.map(|subject| html::unescape(&subject)),
-                "comment" => post.comment.map(|comment| {
-                    let (comment, unknowns) = html::clean(&comment).unwrap();
-                    if !unknowns.is_empty() {
-                        error!(
-                            "/{}/ No. {}: Unknown element{}: {:?}",
-                            board,
-                            no,
-                            if unknowns.len() == 1 { "" } else { "s" },
-                            unknowns
-                        );
-                    }
-                    comment
-                }),
+                "title" => post.subject.map(|subject| html::unescape(subject, Some((board, no)))),
+                "comment" => post.comment.map(|comment| html::clean(comment, Some((board, no)))),
                 "sticky" => post.op_data.sticky,
                 // We only want to mark threads as locked if they are closed before being archived.
                 // This is because all archived threads are marked as closed.

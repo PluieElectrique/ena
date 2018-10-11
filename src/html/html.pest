@@ -1,0 +1,39 @@
+html  = _{ SOI ~ value* ~ EOI }
+value = _{ text | span | code | banned | other }
+
+text      = { (!("<" ~ "/"? ~ tag_names) ~ ANY)+ }
+// Using "b" instead of "b>" would stop `text` at "<br>" and break [fortune]
+// For the rule "b ", it's probably safe to assume that whitespace other than a space (0x20) will
+// not be used in a <b> tag with attributes
+tag_names = { "span" | "pre" | "strong" | "b>" | "b " }
+
+span       = _{ "<span class=\"" ~ span_inner ~ "</span>" }
+span_inner = _{ quote | deadlink | fortune | shiftjis | qst_italic | qst_bold | qst_color }
+
+quote    = { "quote\">" ~ value* }
+deadlink = { "deadlink\">" ~ value* }
+
+// We use `value*` to guard against [fortune] containing tags in the future
+fortune       = { "fortune\" style=\"color:" ~ fortune_color ~ "\"><br><br><b>" ~ value* ~ "</b>" }
+fortune_color = { "#" ~ ASCII_HEX_DIGIT{6} }
+
+shiftjis = { "sjis\">" ~ value* }
+
+qst_italic = { "mu-i\">" ~ value* }
+qst_bold   = { "mu-s\">" ~ value* }
+qst_color  = { "mu-" ~ (red | green | blue) ~ "\">" ~ value* }
+red        = { "r" }
+green      = { "g" }
+blue       = { "b" }
+
+// We could handle these tags by using regex to replace the start and end tags with BBCode. But,
+// unlike basic tags such as <b>, these elements might be used for something else in the future.
+// So, to be safe, we use Pest to correctly match the start and end tags.
+// Also, again we use `value*` instead of `text` to be safe
+code   = { "<pre class=\"prettyprint\">" ~ value* ~ "</pre>" }
+banned = { "<strong style=\"color: red;\">" ~ value* ~ "</strong>" }
+
+other       = { other_start ~ other_inner ~ other_end }
+other_start = { "<" ~ !"/" ~ (!">" ~ ANY)+ ~ ">" }
+other_inner = { value* }
+other_end   = { "</" ~ (!">" ~ ANY)+ ~ ">" }
