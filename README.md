@@ -42,7 +42,7 @@ By default, only errors are logged. Logging is configured by setting the `RUST_L
 * Posts are not trimmed of whitespace (Asagi trims whitespace from the start and end of each line)
 * Setting the group file permission (`webserverGroup`) of downloaded media is currently not supported
 * Media are only downloaded the first time they or the post they are in is seen. This means that if a thread is inserted and its media are queued to download, but the program crashes, on restart those media that didn't download will **never** be downloaded.
-* Data must be complete and correct for it to be processed. Data with incorrect types, missing fields, or other errors is silently rejected during deserialization. For example, if the media of a post had no thumbnail, and the `tn_w` and `tn_h` fields were omitted, Ena would not replace them with defaults of 0. Instead, the media would be ignored, even if the full file existed
+* API data must be complete and correct for it to be processed. Data with incorrect types, missing fields, or other errors is silently rejected during deserialization. For example, if the media of a post had no thumbnail, and the `tn_w` and `tn_h` fields were omitted, Ena would not replace them with defaults of 0. Instead, the media would be ignored, even if the full file existed
 
 ### Database
 
@@ -65,7 +65,7 @@ Ena strives to be an accurate scraper, but it isn't perfect.
 
 ### Data loss
 
-* Threads and posts deleted while Ena is stopped will not be marked as such when it restarts
+* Threads and posts deleted on 4chan while Ena is stopped will not be marked as such when it restarts
 * If Ena crashes in the process of updating an archived thread, on restart the thread may be marked as "archived" even if the update never happened. Thus, changes between the last poll of the thread and the archival of it may be lost
 * As mentioned above, if Ena crashes while media are queued to download, on restart they will not be re-queued. Thus, they will never be downloaded
 
