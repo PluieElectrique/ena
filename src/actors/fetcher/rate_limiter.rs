@@ -125,8 +125,8 @@ where
     }
 }
 
-/// A stream adapter which polls a "task" stream to completion.
-#[must_use = "streams do nothing unless polled"]
+/// A stream-to-future adapter which polls a "task" stream to completion.
+#[must_use = "futures do nothing unless polled"]
 pub struct Consume<S>
 where
     S: Stream<Item = (), Error = ()>,
