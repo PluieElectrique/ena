@@ -28,6 +28,9 @@ use four_chan::*;
 use RateLimitingConfig;
 
 const RFC_1123_FORMAT: &str = "%a, %d %b %Y %T GMT";
+const MEDIA_CHANNEL_CAPACITY: usize = 1000;
+const THREAD_CHANNEL_CAPACITY: usize = 500;
+const THREAD_LIST_CHANNEL_CAPACITY: usize = 200;
 
 /// An actor which fetches threads, thread lists, archives, and media from the 4chan API. Fetching
 /// the catalog or pages of a board or boards.json is not used and thus unsupported.
@@ -67,13 +70,13 @@ impl Fetcher {
         let https = HttpsConnector::new(2).context("Could not create HttpsConnector")?;
         let client = Arc::new(Client::builder().build::<_, Body>(https));
 
-        let (media_rl_sender, receiver) = mpsc::channel(1000);
+        let (media_rl_sender, receiver) = mpsc::channel(MEDIA_CHANNEL_CAPACITY);
         runtime.spawn(Consume::new(RateLimiter::new(receiver, media_rl_config)));
 
-        let (thread_rl_sender, receiver) = mpsc::channel(500);
+        let (thread_rl_sender, receiver) = mpsc::channel(THREAD_CHANNEL_CAPACITY);
         Arbiter::spawn(Consume::new(RateLimiter::new(receiver, thread_rl_config)));
 
-        let (thread_list_rl_sender, receiver) = mpsc::channel(200);
+        let (thread_list_rl_sender, receiver) = mpsc::channel(THREAD_LIST_CHANNEL_CAPACITY);
         Arbiter::spawn(Consume::new(RateLimiter::new(
             receiver,
             thread_list_rl_config,
