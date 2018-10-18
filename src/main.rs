@@ -51,20 +51,18 @@ fn main() {
     }).start();
 
     let thread_updater = ThreadUpdater::new(
-        database.clone(),
+        database,
         fetcher.clone(),
         config.refetch_archived_threads,
         config.always_add_archive_times,
     ).start();
 
-    for board in config.boards {
-        BoardPoller::new(
-            board,
-            Duration::from_secs(config.poll_interval),
-            thread_updater.clone(),
-            fetcher.clone(),
-        ).start();
-    }
+    BoardPoller::new(
+        &config.boards,
+        Duration::from_secs(config.poll_interval),
+        thread_updater,
+        fetcher,
+    ).start();
 
     info!("Ena is running");
     sys.run();

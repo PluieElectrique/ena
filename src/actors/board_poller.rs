@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
 use actix::fut;
@@ -28,8 +29,8 @@ pub enum ThreadUpdate {
 /// An actor which watches a board's threads and sends updates to its
 /// [`ThreadUpdater`](struct.ThreadUpdater.html).
 pub struct BoardPoller {
-    board: Board,
-    threads: Vec<Thread>,
+    boards: Vec<Board>,
+    threads: HashMap<Board, Vec<Thread>>,
     interval: Duration,
     thread_updater: Addr<ThreadUpdater>,
     fetcher: Addr<Fetcher>,
@@ -39,37 +40,50 @@ impl Actor for BoardPoller {
     type Context = Context<Self>;
 
     fn started(&mut self, ctx: &mut Context<Self>) {
-        if self.board.is_archived() {
-            self.poll_archive(ctx);
+        for &board in &self.boards {
+            if board.is_archived() {
+                self.poll_archive(board, ctx);
+            }
+            self.poll(board, ctx);
         }
-        self.poll(ctx);
     }
 }
 
 impl BoardPoller {
     pub fn new(
-        board: Board,
+        boards: &[Board],
         interval: Duration,
         thread_updater: Addr<ThreadUpdater>,
         fetcher: Addr<Fetcher>,
     ) -> Self {
+        let mut threads = HashMap::new();
+        for &board in boards {
+            threads.insert(board, vec![]);
+        }
+        threads.shrink_to_fit();
+
         Self {
-            board,
-            threads: vec![],
+            boards: boards.to_owned(),
+            threads,
             interval,
             thread_updater,
             fetcher,
         }
     }
 
-    fn update_threads(&mut self, mut curr_threads: Vec<Thread>, last_modified: DateTime<Utc>) {
+    fn update_threads(
+        &mut self,
+        board: Board,
+        mut curr_threads: Vec<Thread>,
+        last_modified: DateTime<Utc>,
+    ) {
         use self::ThreadUpdate::*;
         let mut updates = vec![];
 
         let push_removed = {
             let last_no = curr_threads[curr_threads.len() - 1].no;
             let anchor_index = self
-                .threads
+                .threads[&board]
                 .iter()
                 .rev()
                 // We don't check that last_modified hasn't changed. This means there is a slight
@@ -101,7 +115,7 @@ impl BoardPoller {
         curr_threads.sort_by(|a, b| a.no.cmp(&b.no));
 
         {
-            let mut prev_iter = self.threads.iter();
+            let mut prev_iter = self.threads[&board].iter();
             let mut curr_iter = curr_threads.iter();
 
             let mut curr_thread = curr_iter.next();
@@ -152,7 +166,7 @@ impl BoardPoller {
             let len = updates.len();
             debug!(
                 "/{}/: Updating {} thread{}{}{}{}{}",
-                self.board,
+                board,
                 len,
                 if len == 1 { "" } else { "s" },
                 zero_format!(", {} new", new),
@@ -164,7 +178,7 @@ impl BoardPoller {
 
         let future = self
             .thread_updater
-            .send(BoardUpdate(self.board, updates, last_modified))
+            .send(BoardUpdate(board, updates, last_modified))
             .map_err(|err| error!("{}", err));
         Arbiter::spawn(
             // It often takes 1-2 seconds for new data to go from an updated last_modified in
@@ -174,60 +188,60 @@ impl BoardPoller {
                 .map_err(|err| error!("{}", err))
                 .and_then(|_| future),
         );
-        self.threads = curr_threads;
+        self.threads.insert(board, curr_threads);
     }
 
-    fn poll(&self, ctx: &mut Context<Self>) {
+    fn poll(&self, board: Board, ctx: &mut Context<Self>) {
         ctx.spawn(
             self.fetcher
-                .send(FetchThreads(self.board))
+                .send(FetchThreads(board))
                 .map_err(|err| log_error!(&err))
                 .into_actor(self)
                 .timeout(self.interval, ())
-                .then(|res, act, ctx| {
+                .then(move |res, act, ctx| {
                     if let Ok(res) = res {
                         match res {
                             Ok((threads, last_modified)) => {
-                                act.update_threads(threads, last_modified);
+                                act.update_threads(board, threads, last_modified);
                             }
                             Err(err) => match err {
                                 FetchError::NotModified => {}
-                                _ => error!("/{}/: Failed to fetch threads: {}", act.board, err),
+                                _ => error!("/{}/: Failed to fetch threads: {}", board, err),
                             },
                         }
                     }
-                    ctx.run_later(act.interval, |act, ctx| {
-                        act.poll(ctx);
+                    ctx.run_later(act.interval, move |act, ctx| {
+                        act.poll(board, ctx);
                     });
                     fut::ok(())
                 }),
         );
     }
 
-    fn poll_archive(&self, ctx: &mut Context<Self>) {
+    fn poll_archive(&self, board: Board, ctx: &mut Context<Self>) {
         ctx.spawn(
             self.fetcher
-                .send(FetchArchive(self.board))
+                .send(FetchArchive(board))
                 .map_err(|err| log_error!(&err))
                 .into_actor(self)
-                .map(|res, act, _ctx| match res {
+                .map(move |res, act, _ctx| match res {
                     Ok(threads) => {
                         let len = threads.len();
                         debug!(
                             "/{}/: Fetched {} archived thread{}",
-                            act.board,
+                            board,
                             len,
                             if len == 1 { "" } else { "s" },
                         );
                         Arbiter::spawn(
                             act.thread_updater
-                                .send(ArchiveUpdate(act.board, threads))
+                                .send(ArchiveUpdate(board, threads))
                                 .map_err(|err| error!("{}", err)),
                         );
                     }
-                    Err(err) => error!("/{}/: Failed to fetch archive: {}", act.board, err),
-                }).map_err(|err, act, _ctx| {
-                    error!("/{}/: Failed to fetch archive: {:?}", act.board, err)
+                    Err(err) => error!("/{}/: Failed to fetch archive: {}", board, err),
+                }).map_err(move |err, _act, _ctx| {
+                    error!("/{}/: Failed to fetch archive: {:?}", board, err)
                 }),
         );
     }
