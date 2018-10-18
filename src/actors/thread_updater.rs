@@ -16,8 +16,7 @@ use four_chan::{self, Board, OpData, Post};
 /// An actor which updates a board's thread when it receives change notifications from its
 /// [`BoardPoller`](struct.BoardPoller.html).
 pub struct ThreadUpdater {
-    board: Board,
-    thread_meta: HashMap<u64, ThreadMetadata>,
+    thread_meta: HashMap<(Board, u64), ThreadMetadata>,
     fetcher: Addr<Fetcher>,
     database: Addr<Database>,
     refetch_archived_threads: bool,
@@ -30,14 +29,12 @@ impl Actor for ThreadUpdater {
 
 impl ThreadUpdater {
     pub fn new(
-        board: Board,
         database: Addr<Database>,
         fetcher: Addr<Fetcher>,
         refetch_archived_threads: bool,
         always_add_archive_times: bool,
     ) -> Self {
         Self {
-            board,
             thread_meta: HashMap::new(),
             fetcher,
             database,
@@ -46,13 +43,12 @@ impl ThreadUpdater {
         }
     }
 
-    fn insert_posts(&mut self, no: u64, posts: Vec<Post>) {
+    fn insert_posts(&mut self, board: Board, no: u64, posts: Vec<Post>) {
         if !posts.is_empty() {
-            let board = self.board;
             let fetcher = self.fetcher.clone();
             Arbiter::spawn(
                 self.database
-                    .send(InsertPosts(self.board, no, posts))
+                    .send(InsertPosts(board, no, posts))
                     .map_err(|err| log_error!(&err))
                     .and_then(|res| res.map_err(|err| error!("{}", err)))
                     .and_then(move |filenames| {
@@ -70,31 +66,36 @@ impl ThreadUpdater {
         }
     }
 
-    fn modify_posts(&self, modified_posts: Vec<(u64, Option<String>, Option<bool>)>) {
+    fn modify_posts(&self, board: Board, modified_posts: Vec<(u64, Option<String>, Option<bool>)>) {
         if !modified_posts.is_empty() {
             Arbiter::spawn(
                 self.database
-                    .send(UpdatePost(self.board, modified_posts))
+                    .send(UpdatePost(board, modified_posts))
                     .map_err(|err| error!("{}", err))
                     .and_then(|res| res.map_err(|err| error!("{}", err))),
             );
         }
     }
 
-    fn update_op_data(&self, no: u64, op_data: OpData) {
+    fn update_op_data(&self, board: Board, no: u64, op_data: OpData) {
         Arbiter::spawn(
             self.database
-                .send(UpdateOp(self.board, no, op_data))
+                .send(UpdateOp(board, no, op_data))
                 .map_err(|err| error!("{}", err))
                 .and_then(|res| res.map_err(|err| error!("{}", err))),
         );
     }
 
-    fn remove_posts(&self, removed_posts: Vec<(u64, RemovedStatus)>, time: DateTime<Utc>) {
+    fn remove_posts(
+        &self,
+        board: Board,
+        removed_posts: Vec<(u64, RemovedStatus)>,
+        time: DateTime<Utc>,
+    ) {
         if !removed_posts.is_empty() {
             Arbiter::spawn(
                 self.database
-                    .send(MarkPostsRemoved(self.board, removed_posts, time))
+                    .send(MarkPostsRemoved(board, removed_posts, time))
                     .map_err(|err| error!("{}", err))
                     .and_then(|res| res.map_err(|err| error!("{}", err))),
             );
@@ -103,14 +104,15 @@ impl ThreadUpdater {
 
     fn process_modified(
         &mut self,
+        board: Board,
         no: u64,
         (mut thread, last_modified): (Vec<Post>, DateTime<Utc>),
         curr_meta: &ThreadMetadata,
         prev_meta: &ThreadMetadata,
     ) {
         if curr_meta.op_data != prev_meta.op_data {
-            debug!("/{}/ No. {}: Updating OP data", self.board, no);
-            self.update_op_data(no, curr_meta.op_data.clone());
+            debug!("/{}/ No. {}: Updating OP data", board, no);
+            self.update_op_data(board, no, curr_meta.op_data.clone());
         }
 
         let mut new_posts = vec![];
@@ -157,7 +159,7 @@ impl ThreadUpdater {
             if (n + m + d) > 0 {
                 debug!(
                     "/{}/ No. {}: {}{}{}{}{}",
-                    self.board,
+                    board,
                     no,
                     zero_format!("{} new", n),
                     if n * (m + d) == 0 { "" } else { ", " },
@@ -168,15 +170,21 @@ impl ThreadUpdater {
             }
         }
 
-        self.insert_posts(no, new_posts);
-        self.modify_posts(modified_posts);
-        self.remove_posts(deleted_posts, last_modified);
+        self.insert_posts(board, no, new_posts);
+        self.modify_posts(board, modified_posts);
+        self.remove_posts(board, deleted_posts, last_modified);
     }
 
-    fn process_thread(&self, no: u64, ctx: &mut <Self as Actor>::Context, handle_deleted: bool) {
+    fn process_thread(
+        &self,
+        board: Board,
+        no: u64,
+        ctx: &mut <Self as Actor>::Context,
+        handle_deleted: bool,
+    ) {
         let future = self
             .fetcher
-            .send(FetchThread(self.board, no))
+            .send(FetchThread(board, no))
             .map_err(|err| log_error!(&err))
             .into_actor(self)
             .map(move |res, act, _ctx| match res {
@@ -186,15 +194,21 @@ impl ThreadUpdater {
                     thread.sort_by(|a, b| a.no.cmp(&b.no));
 
                     let curr_meta = ThreadMetadata::from_thread(&thread);
-                    if let Some(prev_meta) = act.thread_meta.remove(&no) {
-                        act.process_modified(no, (thread, last_modified), &curr_meta, &prev_meta);
+                    if let Some(prev_meta) = act.thread_meta.remove(&(board, no)) {
+                        act.process_modified(
+                            board,
+                            no,
+                            (thread, last_modified),
+                            &curr_meta,
+                            &prev_meta,
+                        );
                     } else {
-                        debug!("/{}/ No. {}: Inserting thread", act.board, no);
-                        act.insert_posts(no, thread);
+                        debug!("/{}/ No. {}: Inserting thread", board, no);
+                        act.insert_posts(board, no, thread);
                     }
 
                     if !curr_meta.op_data.archived {
-                        act.thread_meta.insert(no, curr_meta);
+                        act.thread_meta.insert((board, no), curr_meta);
                     }
                 }
                 Err(err) => match err {
@@ -202,14 +216,14 @@ impl ThreadUpdater {
                     FetchError::NotFound(_) => {
                         warn!(
                             "/{}/ No. {} was deleted before it could be processed",
-                            act.board, no,
+                            board, no,
                         );
                         if handle_deleted {
-                            act.thread_meta.remove(&no);
-                            act.remove_posts(vec![(no, RemovedStatus::Deleted)], Utc::now());
+                            act.thread_meta.remove(&(board, no));
+                            act.remove_posts(board, vec![(no, RemovedStatus::Deleted)], Utc::now());
                         }
                     }
-                    _ => error!("/{}/ No. {} fetch failed: {}", act.board, no, err),
+                    _ => error!("/{}/ No. {} fetch failed: {}", board, no, err),
                 },
             });
         ctx.spawn(future);
@@ -221,36 +235,37 @@ impl Handler<BoardUpdate> for ThreadUpdater {
 
     fn handle(&mut self, msg: BoardUpdate, ctx: &mut Self::Context) {
         let mut removed_threads = vec![];
+        let BoardUpdate(board, updates, last_modified) = msg;
 
-        use self::ThreadUpdate::*;
-        for thread in msg.0 {
+        for thread in updates {
+            use self::ThreadUpdate::*;
             match thread {
-                New(no) | Modified(no) => self.process_thread(no, ctx, true),
+                New(no) | Modified(no) => self.process_thread(board, no, ctx, true),
                 BumpedOff(no) => {
                     // If this thread isn't in the map, it's already been archived or deleted
-                    if self.thread_meta.contains_key(&no) {
-                        if self.board.is_archived() && self.refetch_archived_threads {
-                            debug!("/{}/ No. {}: Bumped off, refetching", self.board, no);
-                            self.process_thread(no, ctx, true);
+                    if self.thread_meta.contains_key(&(board, no)) {
+                        if board.is_archived() && self.refetch_archived_threads {
+                            debug!("/{}/ No. {}: Bumped off, refetching", board, no);
+                            self.process_thread(board, no, ctx, true);
                         } else {
-                            debug!("/{}/ No. {}: Bumped off", self.board, no);
-                            if self.board.is_archived() || self.always_add_archive_times {
+                            debug!("/{}/ No. {}: Bumped off", board, no);
+                            if board.is_archived() || self.always_add_archive_times {
                                 removed_threads.push((no, RemovedStatus::Archived));
                             }
-                            self.thread_meta.remove(&no);
+                            self.thread_meta.remove(&(board, no));
                         }
                     }
                 }
                 Deleted(no) => {
                     // If this thread isn't in the map, then we've already handled its deletion
-                    if self.thread_meta.remove(&no).is_some() {
-                        debug!("/{}/ No. {} was deleted", self.board, no);
+                    if self.thread_meta.remove(&(board, no)).is_some() {
+                        debug!("/{}/ No. {} was deleted", board, no);
                         removed_threads.push((no, RemovedStatus::Deleted));
                     }
                 }
             }
         }
-        self.remove_posts(removed_threads, msg.1);
+        self.remove_posts(board, removed_threads, last_modified);
     }
 }
 
@@ -258,36 +273,37 @@ impl Handler<ArchiveUpdate> for ThreadUpdater {
     type Result = ();
 
     fn handle(&mut self, msg: ArchiveUpdate, ctx: &mut Self::Context) {
+        let ArchiveUpdate(board, nos) = msg;
         ctx.spawn(
             self.database
-                .send(GetUnarchivedThreads(self.board, msg.0))
+                .send(GetUnarchivedThreads(board, nos))
                 .into_actor(self)
-                .map(|res, act, ctx| {
+                .map(move |res, act, ctx| {
                     match res {
                         Ok(threads) => {
                             let len = threads.len();
                             debug!(
                                 "/{}/: Inserting {} new archived thread{}",
-                                act.board,
+                                board,
                                 len,
                                 if len == 1 { "" } else { "s" },
                             );
                             for no in threads {
                                 // We pass false for handle_deleted because if an archived thread 404's,
                                 // then it expired before we processed it, and was not deleted.
-                                act.process_thread(no, ctx, false);
+                                act.process_thread(board, no, ctx, false);
                             }
                         }
                         Err(err) => error!(
                             "/{}/: Failed to process archived threads: {}",
-                            act.board, err
+                            board, err
                         ),
                     }
                 })
-                .map_err(|err, act, _ctx| {
+                .map_err(move |err, _act, _ctx| {
                     error!(
                         "/{}/: Failed to process archived threads: {}",
-                        act.board, err
+                        board, err
                     )
                 }),
         );

@@ -50,19 +50,18 @@ fn main() {
         process::exit(1);
     }).start();
 
-    for board in config.boards {
-        let thread_updater = ThreadUpdater::new(
-            board,
-            database.clone(),
-            fetcher.clone(),
-            config.refetch_archived_threads,
-            config.always_add_archive_times,
-        ).start();
+    let thread_updater = ThreadUpdater::new(
+        database.clone(),
+        fetcher.clone(),
+        config.refetch_archived_threads,
+        config.always_add_archive_times,
+    ).start();
 
+    for board in config.boards {
         BoardPoller::new(
             board,
             Duration::from_secs(config.poll_interval),
-            thread_updater,
+            thread_updater.clone(),
             fetcher.clone(),
         ).start();
     }

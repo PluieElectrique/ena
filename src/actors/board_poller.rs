@@ -12,10 +12,10 @@ use super::ThreadUpdater;
 use four_chan::{Board, Thread};
 
 #[derive(Message)]
-pub struct ArchiveUpdate(pub Vec<u64>);
+pub struct ArchiveUpdate(pub Board, pub Vec<u64>);
 
 #[derive(Message)]
-pub struct BoardUpdate(pub Vec<ThreadUpdate>, pub DateTime<Utc>);
+pub struct BoardUpdate(pub Board, pub Vec<ThreadUpdate>, pub DateTime<Utc>);
 
 #[derive(Debug)]
 pub enum ThreadUpdate {
@@ -164,7 +164,7 @@ impl BoardPoller {
 
         let future = self
             .thread_updater
-            .send(BoardUpdate(updates, last_modified))
+            .send(BoardUpdate(self.board, updates, last_modified))
             .map_err(|err| error!("{}", err));
         Arbiter::spawn(
             // It often takes 1-2 seconds for new data to go from an updated last_modified in
@@ -221,7 +221,7 @@ impl BoardPoller {
                         );
                         Arbiter::spawn(
                             act.thread_updater
-                                .send(ArchiveUpdate(threads))
+                                .send(ArchiveUpdate(act.board, threads))
                                 .map_err(|err| error!("{}", err)),
                         );
                     }
