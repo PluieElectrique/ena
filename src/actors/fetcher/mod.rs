@@ -9,14 +9,14 @@ use actix::prelude::*;
 use chrono;
 use chrono::prelude::*;
 use failure::{Error, ResultExt};
-use futures::future;
+use futures::future::{self, Either};
 use futures::prelude::*;
+use futures::stream;
 use futures::sync::mpsc::{self, Sender};
 use hyper::client::{Client, HttpConnector};
 use hyper::header::{self, HeaderValue};
 use hyper::{self, Body, Request, StatusCode, Uri};
 use hyper_tls::HttpsConnector;
-use log::Level;
 use serde_json;
 use tokio;
 use tokio::runtime::Runtime;
@@ -27,6 +27,8 @@ use self::rate_limiter::{Consume, RateLimiter};
 use four_chan::*;
 use RateLimitingConfig;
 
+type HttpsClient = Client<HttpsConnector<HttpConnector>>;
+
 const RFC_1123_FORMAT: &str = "%a, %d %b %Y %T GMT";
 const MEDIA_CHANNEL_CAPACITY: usize = 1000;
 const THREAD_CHANNEL_CAPACITY: usize = 500;
@@ -35,10 +37,10 @@ const THREAD_LIST_CHANNEL_CAPACITY: usize = 200;
 /// An actor which fetches threads, thread lists, archives, and media from the 4chan API. Fetching
 /// the catalog or pages of a board or boards.json is not used and thus unsupported.
 pub struct Fetcher {
-    client: Arc<Client<HttpsConnector<HttpConnector>>>,
+    client: Arc<HttpsClient>,
     last_modified: HashMap<FetchKey, DateTime<Utc>>,
     media_path: PathBuf,
-    media_rl_sender: Sender<Box<Future<Item = (), Error = ()> + Send>>,
+    media_rl_sender: Sender<FetchMedia>,
     thread_rl_sender: Sender<Box<Future<Item = (), Error = ()>>>,
     thread_list_rl_sender: Sender<Box<Future<Item = (), Error = ()>>>,
     // Fetcher must use its own runtime for fetching media because tokio::fs functions can't use the
@@ -70,8 +72,20 @@ impl Fetcher {
         let https = HttpsConnector::new(2).context("Could not create HttpsConnector")?;
         let client = Arc::new(Client::builder().build::<_, Body>(https));
 
-        let (media_rl_sender, receiver) = mpsc::channel(MEDIA_CHANNEL_CAPACITY);
-        runtime.spawn(Consume::new(RateLimiter::new(receiver, media_rl_config)));
+        let media_rl_sender = {
+            let (sender, receiver) = mpsc::channel(MEDIA_CHANNEL_CAPACITY);
+            let client = client.clone();
+            let media_path = media_path.clone();
+            let stream = receiver
+                .map(|FetchMedia(board, filenames)| {
+                    stream::iter_ok(filenames.into_iter().map(move |filename| (board, filename)))
+                }).flatten()
+                .map(move |(board, filename)| {
+                    fetch_media(board, filename, &client, media_path.clone())
+                });
+            runtime.spawn(Consume::new(RateLimiter::new(stream, media_rl_config)));
+            sender
+        };
 
         let (thread_rl_sender, receiver) = mpsc::channel(THREAD_CHANNEL_CAPACITY);
         Arbiter::spawn(Consume::new(RateLimiter::new(receiver, thread_rl_config)));
@@ -151,76 +165,6 @@ impl Fetcher {
                     .and_then(|_| res.into_body().concat2().from_err())
                     .map(move |body| (body, last_modified))
             })
-    }
-
-    fn fetch_media(&mut self, board: Board, filename: String) {
-        let is_thumb = filename.ends_with("s.jpg");
-
-        let mut temp_path = self.media_path.clone();
-        temp_path.push(board.to_string());
-        temp_path.push("tmp");
-        temp_path.push(&filename);
-
-        let mut real_path = self.media_path.clone();
-        real_path.push(board.to_string());
-        real_path.push(if is_thumb { "thumb" } else { "image" });
-        real_path.push(&filename[0..4]);
-        real_path.push(&filename[4..6]);
-        std::fs::create_dir_all(&real_path).unwrap();
-        real_path.push(&filename);
-
-        if real_path.exists() {
-            error!("/{}/: Media {} already exists!", board, filename);
-            return;
-        }
-
-        let uri: Uri = format!("{}/{}/{}", IMG_URI_PREFIX, board, filename)
-            .parse()
-            .unwrap_or_else(|err| {
-                panic!(
-                    "Could not parse URI from ({}, {}): {}",
-                    board, filename, err
-                );
-            });
-
-        let client = self.client.clone();
-        let request = Request::get(uri.clone()).body(Body::default()).unwrap();
-        let future = future::lazy(move || client.request(request))
-            .from_err()
-            .join(tokio::fs::File::create(temp_path.clone()).from_err())
-            .and_then(move |(res, file)| match res.status() {
-                StatusCode::OK => future::ok((res, file)),
-                StatusCode::NOT_FOUND => future::err(FetchError::NotFound(uri)),
-                _ => future::err(res.status().into()),
-            })
-            .and_then(|(res, file)| {
-                res.into_body().from_err().fold(file, |file, chunk| {
-                    tokio::io::write_all(file, chunk)
-                        .from_err::<FetchError>()
-                        .map(|(file, _)| file)
-                })
-            })
-            .and_then(move |_| {
-                if log_enabled!(Level::Debug) {
-                    debug!(
-                        "/{}/: Writing {}{}",
-                        board,
-                        if is_thumb { "" } else { " " },
-                        filename
-                    );
-                }
-                tokio::fs::rename(temp_path, real_path).from_err()
-            })
-            // TODO: Retry request
-            .map_err(move |err| error!("/{}/: Failed to fetch media: {}", board, err));
-
-        self.runtime.spawn(
-            self.media_rl_sender
-                .clone()
-                .send(Box::new(future))
-                .map(|_| ())
-                .map_err(|err| error!("{}", err)),
-        );
     }
 }
 
@@ -467,8 +411,74 @@ impl Handler<FetchMedia> for Fetcher {
         temp_path.push("tmp");
         std::fs::create_dir_all(&temp_path).unwrap();
 
-        for filename in msg.1 {
-            self.fetch_media(msg.0, filename);
-        }
+        self.runtime.spawn(
+            self.media_rl_sender
+                .clone()
+                .send(msg)
+                .map(|_| ())
+                .map_err(|err| error!("{}", err)),
+        );
     }
+}
+
+fn fetch_media(
+    board: Board,
+    filename: String,
+    client: &Arc<HttpsClient>,
+    media_path: PathBuf,
+) -> impl Future<Item = (), Error = ()> {
+    let is_thumb = filename.ends_with("s.jpg");
+
+    let mut temp_path = media_path.clone();
+    temp_path.push(board.to_string());
+    temp_path.push("tmp");
+    temp_path.push(&filename);
+
+    let mut real_path = media_path;
+    real_path.push(board.to_string());
+    real_path.push(if is_thumb { "thumb" } else { "image" });
+    real_path.push(&filename[0..4]);
+    real_path.push(&filename[4..6]);
+    std::fs::create_dir_all(&real_path).unwrap();
+    real_path.push(&filename);
+
+    if real_path.exists() {
+        error!("/{}/: Media {} already exists!", board, filename);
+        return Either::A(future::err(()));
+    }
+
+    let uri: Uri = format!("{}/{}/{}", IMG_URI_PREFIX, board, filename)
+        .parse()
+        .unwrap_or_else(|err| {
+            panic!(
+                "Could not parse URI from ({}, {}): {}",
+                board, filename, err
+            );
+        });
+
+    let future = client
+        .get(uri.clone())
+        .from_err()
+        .join(tokio::fs::File::create(temp_path.clone()).from_err())
+        .and_then(move |(res, file)| match res.status() {
+            StatusCode::OK => Ok((res, file)),
+            StatusCode::NOT_FOUND => Err(FetchError::NotFound(uri)),
+            _ => Err(res.status().into()),
+        }).and_then(|(res, file)| {
+            res.into_body().from_err().fold(file, |file, chunk| {
+                tokio::io::write_all(file, chunk)
+                    .from_err::<FetchError>()
+                    .map(|(file, _)| file)
+            })
+        }).and_then(move |_| {
+            debug!(
+                "/{}/: Writing {}{}",
+                board,
+                if is_thumb { "" } else { " " },
+                filename
+            );
+            tokio::fs::rename(temp_path, real_path).from_err()
+        }).map_err(move |err| error!("/{}/: Failed to fetch media: {}", board, err));
+
+    Either::B(future)
 }
