@@ -455,6 +455,9 @@ pub struct FetchMedia(pub Board, pub Vec<String>);
 impl Handler<FetchMedia> for Fetcher {
     type Result = ();
     fn handle(&mut self, msg: FetchMedia, _ctx: &mut Self::Context) {
+        // If a media future panics, the media runtime will crash and the sender will close. The
+        // Actix system has its own runtime, so it won't crash. But, we can't recover from a media
+        // runtime panic, so if the media runtime crashes we crash the Actix system as well.
         if self.media_rl_sender.is_closed() {
             panic!("Media sender is closed");
         }
