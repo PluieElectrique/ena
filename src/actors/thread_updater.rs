@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::hash::Hasher;
+use std::sync::Arc;
 
 use actix::prelude::*;
 use chrono::prelude::*;
@@ -17,7 +18,7 @@ use four_chan::{self, Board, OpData, Post};
 /// [`BoardPoller`](struct.BoardPoller.html).
 pub struct ThreadUpdater {
     thread_meta: HashMap<(Board, u64), ThreadMetadata>,
-    fetcher: Addr<Fetcher>,
+    fetcher: Arc<Addr<Fetcher>>,
     database: Addr<Database>,
     refetch_archived_threads: bool,
     always_add_archive_times: bool,
@@ -36,7 +37,7 @@ impl ThreadUpdater {
     ) -> Self {
         Self {
             thread_meta: HashMap::new(),
-            fetcher,
+            fetcher: Arc::new(fetcher),
             database,
             refetch_archived_threads,
             always_add_archive_times,
