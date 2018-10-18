@@ -283,7 +283,7 @@ impl Handler<ArchiveUpdate> for ThreadUpdater {
                         Ok(threads) => {
                             let len = threads.len();
                             debug!(
-                                "/{}/: Inserting {} new archived thread{}",
+                                "/{}/: Found {} new archived thread{}",
                                 board,
                                 len,
                                 if len == 1 { "" } else { "s" },
