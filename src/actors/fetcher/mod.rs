@@ -282,9 +282,7 @@ impl FetchThread {
     fn to_uri(&self) -> Uri {
         format!("{}/{}/thread/{}.json", API_URI_PREFIX, self.0, self.1)
             .parse()
-            .unwrap_or_else(|err| {
-                panic!("Could not parse URI from {:?}: {}", self, err);
-            })
+            .unwrap()
     }
 }
 
@@ -321,9 +319,7 @@ impl FetchThreads {
     fn to_uri(&self) -> Uri {
         format!("{}/{}/threads.json", API_URI_PREFIX, self.0)
             .parse()
-            .unwrap_or_else(|err| {
-                panic!("Could not parse URI from {:?}: {}", self, err);
-            })
+            .unwrap()
     }
 }
 
@@ -366,9 +362,7 @@ impl FetchArchive {
     fn to_uri(&self) -> Uri {
         format!("{}/{}/archive.json", API_URI_PREFIX, self.0)
             .parse()
-            .unwrap_or_else(|err| {
-                panic!("Could not parse URI from {:?}: {}", self, err);
-            })
+            .unwrap()
     }
 }
 
