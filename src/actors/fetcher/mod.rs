@@ -1,6 +1,7 @@
 use std;
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -39,7 +40,6 @@ const THREAD_LIST_CHANNEL_CAPACITY: usize = 200;
 pub struct Fetcher {
     client: Arc<HttpsClient>,
     last_modified: HashMap<FetchKey, DateTime<Utc>>,
-    media_path: PathBuf,
     media_rl_sender: Sender<FetchMedia>,
     thread_rl_sender: Sender<Box<Future<Item = (), Error = ()>>>,
     thread_list_rl_sender: Sender<Box<Future<Item = (), Error = ()>>>,
@@ -63,11 +63,20 @@ impl Actor for Fetcher {
 
 impl Fetcher {
     pub fn new(
-        media_path: PathBuf,
+        media_path: &Path,
         media_rl_config: &RateLimitingConfig,
         thread_rl_config: &RateLimitingConfig,
         thread_list_rl_config: &RateLimitingConfig,
     ) -> Result<Self, Error> {
+        std::fs::create_dir_all(media_path).context("Could not create media directory")?;
+        {
+            let mut test_file = media_path.to_owned();
+            test_file.push("ena_permission_test");
+            std::fs::File::create(&test_file).context("Could not access media directory")?;
+            std::fs::remove_file(&test_file)
+                .context("Could not remove media directory permission test file")?;
+        }
+
         let mut runtime = Runtime::new().unwrap();
         let https = HttpsConnector::new(2).context("Could not create HttpsConnector")?;
         let client = Arc::new(Client::builder().build::<_, Body>(https));
@@ -75,7 +84,7 @@ impl Fetcher {
         let media_rl_sender = {
             let (sender, receiver) = mpsc::channel(MEDIA_CHANNEL_CAPACITY);
             let client = client.clone();
-            let media_path = media_path.clone();
+            let media_path = media_path.to_owned();
             let stream = receiver
                 .map(|FetchMedia(board, filenames)| {
                     stream::iter_ok(filenames.into_iter().map(move |filename| (board, filename)))
@@ -99,7 +108,6 @@ impl Fetcher {
         Ok(Self {
             client,
             last_modified: HashMap::new(),
-            media_path,
             media_rl_sender,
             thread_rl_sender,
             thread_list_rl_sender,
@@ -406,11 +414,6 @@ impl Handler<FetchMedia> for Fetcher {
             panic!("Media sender is closed");
         }
 
-        let mut temp_path = self.media_path.clone();
-        temp_path.push(msg.0.to_string());
-        temp_path.push("tmp");
-        std::fs::create_dir_all(&temp_path).unwrap();
-
         self.runtime.spawn(
             self.media_rl_sender
                 .clone()
@@ -432,14 +435,16 @@ fn fetch_media(
     let mut temp_path = media_path.clone();
     temp_path.push(board.to_string());
     temp_path.push("tmp");
+    let temp_dir_future = tokio::fs::create_dir_all(temp_path.clone());
     temp_path.push(&filename);
+    let temp_file_future = tokio::fs::File::create(temp_path.clone());
 
     let mut real_path = media_path;
     real_path.push(board.to_string());
     real_path.push(if is_thumb { "thumb" } else { "image" });
     real_path.push(&filename[0..4]);
     real_path.push(&filename[4..6]);
-    std::fs::create_dir_all(&real_path).unwrap();
+    let real_dir_future = tokio::fs::create_dir_all(real_path.clone());
     real_path.push(&filename);
 
     if real_path.exists() {
@@ -459,8 +464,10 @@ fn fetch_media(
     let future = client
         .get(uri.clone())
         .from_err()
-        .join(tokio::fs::File::create(temp_path.clone()).from_err())
-        .and_then(move |(res, file)| match res.status() {
+        .join3(
+            temp_dir_future.and_then(|_| temp_file_future).from_err(),
+            real_dir_future.from_err(),
+        ).and_then(move |(res, file, _)| match res.status() {
             StatusCode::OK => Ok((res, file)),
             StatusCode::NOT_FOUND => Err(FetchError::NotFound(uri)),
             _ => Err(res.status().into()),

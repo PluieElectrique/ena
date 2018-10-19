@@ -41,7 +41,7 @@ fn main() {
         .start(|_| database);
 
     let fetcher = Fetcher::new(
-        config.media_path,
+        &config.media_path,
         &config.media_rate_limiting,
         &config.thread_rate_limiting,
         &config.thread_list_rate_limiting,
