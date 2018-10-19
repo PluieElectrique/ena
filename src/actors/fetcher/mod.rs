@@ -115,14 +115,14 @@ impl Fetcher {
         })
     }
 
-    fn fetch_with_last_modified<K: Into<FetchKey>>(
+    fn fetch_with_last_modified<M: ToUri + Into<FetchKey>>(
         &mut self,
-        uri: Uri,
-        key: K,
+        msg: M,
         ctx: &Context<Self>,
     ) -> impl Future<Item = (hyper::Chunk, DateTime<Utc>), Error = FetchError> {
+        let uri = msg.to_uri();
         let mut request = Request::get(uri.clone()).body(Body::default()).unwrap();
-        let key = key.into();
+        let key = msg.into();
         let myself = ctx.address();
 
         let last_modified = self
@@ -244,6 +244,10 @@ impl_enum_from!(tokio::timer::Error, FetchError, TimerError);
 impl_enum_from!(std::io::Error, FetchError, IoError);
 impl_enum_from!(MailboxError, FetchError, MailboxError);
 
+trait ToUri {
+    fn to_uri(&self) -> Uri;
+}
+
 // We would like to return an ActorFuture from Fetcher, but we can't because ActorFutures can only
 // run on their own contexts. So, Fetcher must send a message to itself to update `last_modified`.
 struct UpdateLastModified(FetchKey, DateTime<Utc>);
@@ -278,7 +282,7 @@ impl Message for FetchThread {
     type Result = Result<(Vec<Post>, DateTime<Utc>), FetchError>;
 }
 
-impl FetchThread {
+impl ToUri for FetchThread {
     fn to_uri(&self) -> Uri {
         format!("{}/{}/thread/{}.json", API_URI_PREFIX, self.0, self.1)
             .parse()
@@ -290,18 +294,16 @@ impl Handler<FetchThread> for Fetcher {
     type Result = RateLimitedResponse<(Vec<Post>, DateTime<Utc>), FetchError>;
 
     fn handle(&mut self, msg: FetchThread, ctx: &mut Self::Context) -> Self::Result {
-        let future = Box::new(
-            self.fetch_with_last_modified(msg.to_uri(), msg, ctx)
-                .from_err()
-                .and_then(move |(body, last_modified)| {
-                    let PostsWrapper { posts } = serde_json::from_slice(&body)?;
-                    if posts.is_empty() {
-                        Err(FetchError::EmptyData)
-                    } else {
-                        Ok((posts, last_modified))
-                    }
-                }),
-        );
+        let future = Box::new(self.fetch_with_last_modified(msg, ctx).from_err().and_then(
+            move |(body, last_modified)| {
+                let PostsWrapper { posts } = serde_json::from_slice(&body)?;
+                if posts.is_empty() {
+                    Err(FetchError::EmptyData)
+                } else {
+                    Ok((posts, last_modified))
+                }
+            },
+        ));
         RateLimitedResponse {
             sender: self.thread_rl_sender.clone(),
             future,
@@ -315,7 +317,7 @@ impl Message for FetchThreads {
     type Result = Result<(Vec<Thread>, DateTime<Utc>), FetchError>;
 }
 
-impl FetchThreads {
+impl ToUri for FetchThreads {
     fn to_uri(&self) -> Uri {
         format!("{}/{}/threads.json", API_URI_PREFIX, self.0)
             .parse()
@@ -326,25 +328,23 @@ impl FetchThreads {
 impl Handler<FetchThreads> for Fetcher {
     type Result = RateLimitedResponse<(Vec<Thread>, DateTime<Utc>), FetchError>;
     fn handle(&mut self, msg: FetchThreads, ctx: &mut Self::Context) -> Self::Result {
-        let future = Box::new(
-            self.fetch_with_last_modified(msg.to_uri(), msg, ctx)
-                .from_err()
-                .and_then(move |(body, last_modified)| {
-                    let threads: Vec<ThreadPage> = serde_json::from_slice(&body)?;
-                    let mut threads = threads.into_iter().fold(vec![], |mut acc, mut page| {
-                        acc.append(&mut page.threads);
-                        acc
-                    });
-                    for (i, thread) in threads.iter_mut().enumerate() {
-                        thread.bump_index = i;
-                    }
-                    if threads.is_empty() {
-                        Err(FetchError::EmptyData)
-                    } else {
-                        Ok((threads, last_modified))
-                    }
-                }),
-        );
+        let future = Box::new(self.fetch_with_last_modified(msg, ctx).from_err().and_then(
+            move |(body, last_modified)| {
+                let threads: Vec<ThreadPage> = serde_json::from_slice(&body)?;
+                let mut threads = threads.into_iter().fold(vec![], |mut acc, mut page| {
+                    acc.append(&mut page.threads);
+                    acc
+                });
+                for (i, thread) in threads.iter_mut().enumerate() {
+                    thread.bump_index = i;
+                }
+                if threads.is_empty() {
+                    Err(FetchError::EmptyData)
+                } else {
+                    Ok((threads, last_modified))
+                }
+            },
+        ));
         RateLimitedResponse {
             sender: self.thread_list_rl_sender.clone(),
             future,
@@ -358,7 +358,7 @@ impl Message for FetchArchive {
     type Result = Result<Vec<u64>, FetchError>;
 }
 
-impl FetchArchive {
+impl ToUri for FetchArchive {
     fn to_uri(&self) -> Uri {
         format!("{}/{}/archive.json", API_URI_PREFIX, self.0)
             .parse()
