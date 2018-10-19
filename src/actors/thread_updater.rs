@@ -274,10 +274,10 @@ impl Handler<ArchiveUpdate> for ThreadUpdater {
     type Result = ();
 
     fn handle(&mut self, msg: ArchiveUpdate, ctx: &mut Self::Context) {
-        let ArchiveUpdate(board, nos) = msg;
+        let ArchiveUpdate(board, nums) = msg;
         ctx.spawn(
             self.database
-                .send(GetUnarchivedThreads(board, nos))
+                .send(GetUnarchivedThreads(board, nums))
                 .into_actor(self)
                 .map(move |res, act, ctx| {
                     match res {
