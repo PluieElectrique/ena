@@ -143,8 +143,8 @@ impl Fetcher {
         future::lazy(move || client.request(request))
             .from_err()
             .and_then(move |res| match res.status() {
-                StatusCode::NOT_FOUND => future::err(FetchError::NotFound(uri)),
-                StatusCode::NOT_MODIFIED => future::err(FetchError::NotModified),
+                StatusCode::NOT_FOUND => Err(FetchError::NotFound(uri)),
+                StatusCode::NOT_MODIFIED => Err(FetchError::NotModified),
                 StatusCode::OK => {
                     let new_modified = res
                         .headers()
@@ -160,12 +160,12 @@ impl Fetcher {
                             last_modified.format(RFC_1123_FORMAT),
                             new_modified.format(RFC_1123_FORMAT),
                         );
-                        future::err(FetchError::NotModified)
+                        Err(FetchError::NotModified)
                     } else {
-                        future::ok((res, new_modified))
+                        Ok((res, new_modified))
                     }
                 }
-                _ => future::err(res.status().into()),
+                _ => Err(res.status().into()),
             }).and_then(move |(res, last_modified)| {
                 myself
                     .send(UpdateLastModified(key, last_modified))
@@ -376,8 +376,8 @@ impl Handler<FetchArchive> for Fetcher {
             future::lazy(move || client.request(request))
                 .from_err()
                 .and_then(move |res| match res.status() {
-                    StatusCode::OK => future::ok(res),
-                    _ => future::err(res.status().into()),
+                    StatusCode::OK => Ok(res),
+                    _ => Err(res.status().into()),
                 }).and_then(|res| res.into_body().concat2().from_err())
                 .and_then(move |body| {
                     let archive: Vec<u64> = serde_json::from_slice(&body)?;
