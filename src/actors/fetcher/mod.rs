@@ -146,7 +146,7 @@ impl Fetcher {
         future::lazy(move || client.request(request))
             .from_err()
             .and_then(move |res| match res.status() {
-                StatusCode::NOT_FOUND => Err(FetchError::NotFound(uri)),
+                StatusCode::NOT_FOUND => Err(FetchError::NotFound(uri.to_string())),
                 StatusCode::NOT_MODIFIED => Err(FetchError::NotModified),
                 StatusCode::OK => {
                     let new_modified = res
@@ -233,7 +233,7 @@ pub enum FetchError {
     NotModified,
 
     #[fail(display = "Resource not found: {}", _0)]
-    NotFound(Uri),
+    NotFound(String),
 
     #[fail(display = "API returned empty data")]
     EmptyData,
@@ -470,7 +470,7 @@ fn fetch_media(
             real_dir_future.from_err(),
         ).and_then(move |(res, file, _)| match res.status() {
             StatusCode::OK => Ok((res, file)),
-            StatusCode::NOT_FOUND => Err(FetchError::NotFound(uri)),
+            StatusCode::NOT_FOUND => Err(FetchError::NotFound(uri.to_string())),
             _ => Err(res.status().into()),
         }).and_then(|(res, file)| {
             res.into_body().from_err().fold(file, |file, chunk| {
