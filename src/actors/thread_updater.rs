@@ -107,7 +107,8 @@ impl ThreadUpdater {
         &mut self,
         board: Board,
         no: u64,
-        (mut thread, last_modified): (Vec<Post>, DateTime<Utc>),
+        mut thread: Vec<Post>,
+        last_modified: DateTime<Utc>,
         curr_meta: &ThreadMetadata,
         prev_meta: &ThreadMetadata,
     ) {
@@ -199,7 +200,8 @@ impl ThreadUpdater {
                         act.process_modified(
                             board,
                             no,
-                            (thread, last_modified),
+                            thread,
+                            last_modified,
                             &curr_meta,
                             &prev_meta,
                         );
