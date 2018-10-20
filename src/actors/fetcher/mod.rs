@@ -185,8 +185,8 @@ impl From<FetchThread> for LastModifiedKey {
     }
 }
 
-impl From<FetchThreads> for LastModifiedKey {
-    fn from(msg: FetchThreads) -> Self {
+impl From<FetchThreadList> for LastModifiedKey {
+    fn from(msg: FetchThreadList) -> Self {
         (msg.0, None)
     }
 }
@@ -317,12 +317,12 @@ impl Handler<FetchThread> for Fetcher {
     }
 }
 
-pub struct FetchThreads(pub Board);
-impl Message for FetchThreads {
+pub struct FetchThreadList(pub Board);
+impl Message for FetchThreadList {
     type Result = Result<(Vec<Thread>, DateTime<Utc>), FetchError>;
 }
 
-impl ToUri for FetchThreads {
+impl ToUri for FetchThreadList {
     fn to_uri(&self) -> Uri {
         format!("{}/{}/threads.json", API_URI_PREFIX, self.0)
             .parse()
@@ -330,9 +330,9 @@ impl ToUri for FetchThreads {
     }
 }
 
-impl Handler<FetchThreads> for Fetcher {
+impl Handler<FetchThreadList> for Fetcher {
     type Result = RateLimitedResponse<(Vec<Thread>, DateTime<Utc>), FetchError>;
-    fn handle(&mut self, msg: FetchThreads, ctx: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, msg: FetchThreadList, ctx: &mut Self::Context) -> Self::Result {
         let future = Box::new(self.fetch_with_last_modified(msg, ctx).from_err().and_then(
             move |(body, last_modified)| {
                 let threads: Vec<ThreadPage> = serde_json::from_slice(&body)?;

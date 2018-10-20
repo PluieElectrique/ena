@@ -196,7 +196,7 @@ impl BoardPoller {
     fn poll(&self, board: Board, ctx: &mut Context<Self>) {
         ctx.spawn(
             self.fetcher
-                .send(FetchThreads(board))
+                .send(FetchThreadList(board))
                 .map_err(|err| log_error!(&err))
                 .into_actor(self)
                 .timeout(self.interval, ())
