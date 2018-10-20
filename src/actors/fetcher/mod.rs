@@ -39,7 +39,7 @@ const THREAD_LIST_CHANNEL_CAPACITY: usize = 200;
 /// the catalog or pages of a board or boards.json is not used and thus unsupported.
 pub struct Fetcher {
     client: Arc<HttpsClient>,
-    last_modified: HashMap<FetchKey, DateTime<Utc>>,
+    last_modified: HashMap<LastModifiedKey, DateTime<Utc>>,
     media_rl_sender: Sender<FetchMedia>,
     thread_rl_sender: Sender<Box<Future<Item = (), Error = ()>>>,
     thread_list_rl_sender: Sender<Box<Future<Item = (), Error = ()>>>,
@@ -115,7 +115,7 @@ impl Fetcher {
         })
     }
 
-    fn fetch_with_last_modified<M: ToUri + Into<FetchKey>>(
+    fn fetch_with_last_modified<M: ToUri + Into<LastModifiedKey>>(
         &mut self,
         msg: M,
         ctx: &Context<Self>,
@@ -176,6 +176,21 @@ impl Fetcher {
     }
 }
 
+/// `(board, Some(no))` represents a thread and `(board, None)` represents the `threads.json` of that board.
+type LastModifiedKey = (Board, Option<u64>);
+
+impl From<FetchThread> for LastModifiedKey {
+    fn from(msg: FetchThread) -> Self {
+        (msg.0, Some(msg.1))
+    }
+}
+
+impl From<FetchThreads> for LastModifiedKey {
+    fn from(msg: FetchThreads) -> Self {
+        (msg.0, None)
+    }
+}
+
 pub struct RateLimitedResponse<I, E> {
     sender: Sender<Box<Future<Item = (), Error = ()>>>,
     future: Box<Future<Item = I, Error = E>>,
@@ -199,14 +214,6 @@ where
         )
     }
 }
-
-#[derive(Debug, Eq, Hash, PartialEq)]
-enum FetchKey {
-    Thread(FetchThread),
-    Threads(FetchThreads),
-}
-impl_enum_from!(FetchThread, FetchKey, Thread);
-impl_enum_from!(FetchThreads, FetchKey, Threads);
 
 #[derive(Debug, Fail)]
 pub enum FetchError {
@@ -250,7 +257,7 @@ trait ToUri {
 
 // We would like to return an ActorFuture from Fetcher, but we can't because ActorFutures can only
 // run on their own contexts. So, Fetcher must send a message to itself to update `last_modified`.
-struct UpdateLastModified(FetchKey, DateTime<Utc>);
+struct UpdateLastModified(LastModifiedKey, DateTime<Utc>);
 impl Message for UpdateLastModified {
     type Result = Result<(), FetchError>;
 }
@@ -276,7 +283,6 @@ impl Handler<UpdateLastModified> for Fetcher {
     }
 }
 
-#[derive(Debug, Eq, Hash, PartialEq)]
 pub struct FetchThread(pub Board, pub u64);
 impl Message for FetchThread {
     type Result = Result<(Vec<Post>, DateTime<Utc>), FetchError>;
@@ -311,7 +317,6 @@ impl Handler<FetchThread> for Fetcher {
     }
 }
 
-#[derive(Debug, Eq, Hash, PartialEq)]
 pub struct FetchThreads(pub Board);
 impl Message for FetchThreads {
     type Result = Result<(Vec<Thread>, DateTime<Utc>), FetchError>;
