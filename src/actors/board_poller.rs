@@ -19,7 +19,6 @@ pub struct ArchiveUpdate(pub Board, pub Vec<u64>);
 #[derive(Message)]
 pub struct BoardUpdate(pub Board, pub Vec<ThreadUpdate>, pub DateTime<Utc>);
 
-#[derive(Debug)]
 pub enum ThreadUpdate {
     New(u64),
     Modified(u64),

@@ -357,7 +357,6 @@ impl Handler<FetchThreadList> for Fetcher {
     }
 }
 
-#[derive(Debug)]
 pub struct FetchArchive(pub Board);
 impl Message for FetchArchive {
     type Result = Result<Vec<u64>, FetchError>;
@@ -400,7 +399,7 @@ impl Handler<FetchArchive> for Fetcher {
     }
 }
 
-#[derive(Debug, Message)]
+#[derive(Message)]
 pub struct FetchMedia(pub Board, pub Vec<String>);
 
 impl Handler<FetchMedia> for Fetcher {

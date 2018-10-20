@@ -12,7 +12,7 @@ pub struct ThreadPage {
     pub threads: Vec<Thread>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize)]
 pub struct Thread {
     pub no: u64,
     pub last_modified: u64,
@@ -26,7 +26,7 @@ pub struct PostsWrapper {
 }
 
 // Some fields aren't used, and thus are omitted.
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize)]
 pub struct Post {
     // Required fields
     pub no: u64,
@@ -54,7 +54,7 @@ pub struct Post {
     pub image: Option<PostImage>,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[derive(Clone, Deserialize, PartialEq)]
 pub struct OpData {
     #[serde(deserialize_with = "num_to_bool")]
     #[serde(default)]
@@ -68,7 +68,7 @@ pub struct OpData {
     pub archived_on: Option<u64>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize)]
 pub struct PostImage {
     pub filename: String,
     pub ext: String,
