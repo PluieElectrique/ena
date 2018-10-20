@@ -115,11 +115,14 @@ impl Fetcher {
         })
     }
 
-    fn fetch_with_last_modified<M: ToUri + Into<LastModifiedKey>>(
+    fn fetch_with_last_modified<'a, M: 'a>(
         &mut self,
-        msg: M,
+        msg: &'a M,
         ctx: &Context<Self>,
-    ) -> impl Future<Item = (hyper::Chunk, DateTime<Utc>), Error = FetchError> {
+    ) -> impl Future<Item = (hyper::Chunk, DateTime<Utc>), Error = FetchError>
+    where
+        &'a M: ToUri + Into<LastModifiedKey>,
+    {
         let uri = msg.to_uri();
         let mut request = Request::get(uri.clone()).body(Body::default()).unwrap();
         let key = msg.into();
@@ -179,14 +182,14 @@ impl Fetcher {
 /// `(board, Some(no))` represents a thread and `(board, None)` represents the `threads.json` of that board.
 type LastModifiedKey = (Board, Option<u64>);
 
-impl From<FetchThread> for LastModifiedKey {
-    fn from(msg: FetchThread) -> Self {
+impl<'a> From<&'a FetchThread> for LastModifiedKey {
+    fn from(msg: &FetchThread) -> Self {
         (msg.0, Some(msg.1))
     }
 }
 
-impl From<FetchThreadList> for LastModifiedKey {
-    fn from(msg: FetchThreadList) -> Self {
+impl<'a> From<&'a FetchThreadList> for LastModifiedKey {
+    fn from(msg: &FetchThreadList) -> Self {
         (msg.0, None)
     }
 }
@@ -288,7 +291,7 @@ impl Message for FetchThread {
     type Result = Result<(Vec<Post>, DateTime<Utc>), FetchError>;
 }
 
-impl ToUri for FetchThread {
+impl<'a> ToUri for &'a FetchThread {
     fn to_uri(&self) -> Uri {
         format!("{}/{}/thread/{}.json", API_URI_PREFIX, self.0, self.1)
             .parse()
@@ -300,7 +303,7 @@ impl Handler<FetchThread> for Fetcher {
     type Result = RateLimitedResponse<(Vec<Post>, DateTime<Utc>), FetchError>;
 
     fn handle(&mut self, msg: FetchThread, ctx: &mut Self::Context) -> Self::Result {
-        let future = Box::new(self.fetch_with_last_modified(msg, ctx).from_err().and_then(
+        let future = Box::new(self.fetch_with_last_modified(&msg, ctx).from_err().and_then(
             move |(body, last_modified)| {
                 let PostsWrapper { posts } = serde_json::from_slice(&body)?;
                 if posts.is_empty() {
@@ -322,7 +325,7 @@ impl Message for FetchThreadList {
     type Result = Result<(Vec<Thread>, DateTime<Utc>), FetchError>;
 }
 
-impl ToUri for FetchThreadList {
+impl<'a> ToUri for &'a FetchThreadList {
     fn to_uri(&self) -> Uri {
         format!("{}/{}/threads.json", API_URI_PREFIX, self.0)
             .parse()
@@ -333,7 +336,7 @@ impl ToUri for FetchThreadList {
 impl Handler<FetchThreadList> for Fetcher {
     type Result = RateLimitedResponse<(Vec<Thread>, DateTime<Utc>), FetchError>;
     fn handle(&mut self, msg: FetchThreadList, ctx: &mut Self::Context) -> Self::Result {
-        let future = Box::new(self.fetch_with_last_modified(msg, ctx).from_err().and_then(
+        let future = Box::new(self.fetch_with_last_modified(&msg, ctx).from_err().and_then(
             move |(body, last_modified)| {
                 let threads: Vec<ThreadPage> = serde_json::from_slice(&body)?;
                 let mut threads = threads.into_iter().fold(vec![], |mut acc, mut page| {
