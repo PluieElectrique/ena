@@ -182,7 +182,7 @@ impl ThreadUpdater {
         board: Board,
         no: u64,
         ctx: &mut <Self as Actor>::Context,
-        handle_deleted: bool,
+        from_archive_json: bool,
     ) {
         let future = self
             .fetcher
@@ -217,11 +217,18 @@ impl ThreadUpdater {
                 Err(err) => match err {
                     FetchError::NotModified => {}
                     FetchError::NotFound(_) => {
-                        warn!(
-                            "/{}/ No. {} was deleted before it could be processed",
-                            board, no,
-                        );
-                        if handle_deleted {
+                        if from_archive_json {
+                            // If a thread loaded from archive.json 404's, then it expired before we
+                            // could process it, and was not deleted. So, we don't mark it as such.
+                            warn!(
+                                "/{}/ No. {}: Archived thread expired before it could be processed",
+                                board, no,
+                            );
+                        } else {
+                            warn!(
+                                "/{}/ No. {}: Thread deleted before it could be processed",
+                                board, no,
+                            );
                             act.thread_meta.remove(&(board, no));
                             act.remove_posts(board, vec![(no, RemovedStatus::Deleted)], Utc::now());
                         }
@@ -243,13 +250,13 @@ impl Handler<BoardUpdate> for ThreadUpdater {
         for thread in updates {
             use self::ThreadUpdate::*;
             match thread {
-                New(no) | Modified(no) => self.process_thread(board, no, ctx, true),
+                New(no) | Modified(no) => self.process_thread(board, no, ctx, false),
                 BumpedOff(no) => {
                     // If this thread isn't in the map, it's already been archived or deleted
                     if self.thread_meta.contains_key(&(board, no)) {
                         if board.is_archived() && self.refetch_archived_threads {
                             debug!("/{}/ No. {}: Bumped off, refetching", board, no);
-                            self.process_thread(board, no, ctx, true);
+                            self.process_thread(board, no, ctx, false);
                         } else {
                             debug!("/{}/ No. {}: Bumped off", board, no);
                             if board.is_archived() || self.always_add_archive_times {
@@ -292,9 +299,7 @@ impl Handler<ArchiveUpdate> for ThreadUpdater {
                                 if len == 1 { "" } else { "s" },
                             );
                             for no in threads {
-                                // We pass false for handle_deleted because if an archived thread 404's,
-                                // then it expired before we processed it, and was not deleted.
-                                act.process_thread(board, no, ctx, false);
+                                act.process_thread(board, no, ctx, true);
                             }
                         }
                         Err(err) => error!(
