@@ -40,22 +40,29 @@ fn main() {
         .stop_system_on_panic(true)
         .start(|_| database);
 
-    let fetcher = Fetcher::new(
+    let thread_updater_ctx = {
+        // 16 is the default mailbox capacity
+        let (_, receiver) = actix::dev::channel::channel(16);
+        Context::with_receiver(receiver)
+    };
+
+    let fetcher = Fetcher::create(
         &config.media_path,
         &config.media_rate_limiting,
         &config.thread_rate_limiting,
         &config.thread_list_rate_limiting,
+        thread_updater_ctx.address(),
     ).unwrap_or_else(|err| {
         log_error!(err.as_fail());
         process::exit(1);
-    }).start();
+    });
 
-    let thread_updater = ThreadUpdater::new(
+    let thread_updater = thread_updater_ctx.run(ThreadUpdater::new(
         database,
         fetcher.clone(),
         config.refetch_archived_threads,
         config.always_add_archive_times,
-    ).start();
+    ));
 
     BoardPoller::new(
         &config.boards,

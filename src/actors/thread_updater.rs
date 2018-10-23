@@ -177,86 +177,86 @@ impl ThreadUpdater {
         self.remove_posts(board, deleted_posts, last_modified);
     }
 
-    fn process_thread(
-        &self,
-        board: Board,
-        no: u64,
-        ctx: &mut <Self as Actor>::Context,
-        from_archive_json: bool,
-    ) {
-        let future = self
-            .fetcher
-            .send(FetchThread(board, no))
-            .map_err(|err| log_error!(&err))
-            .into_actor(self)
-            .map(move |res, act, _ctx| match res {
-                Ok((mut thread, last_modified)) => {
-                    // Sort ascending by no. The posts should already be sorted, but I have seen one
-                    // case where they weren't. So it's better to be safe.
-                    thread.sort_by(|a, b| a.no.cmp(&b.no));
+    fn process_thread(&mut self, msg: FetchedThread) {
+        let FetchedThread { request, result } = msg;
+        let FetchThread(board, no, from_archive_json) = request;
 
-                    let curr_meta = ThreadMetadata::from_thread(&thread);
-                    if let Some(prev_meta) = act.thread_meta.remove(&(board, no)) {
-                        act.process_modified(
-                            board,
-                            no,
-                            thread,
-                            last_modified,
-                            &curr_meta,
-                            &prev_meta,
+        match result {
+            Ok((mut thread, last_modified)) => {
+                // Sort ascending by no. The posts should already be sorted, but I have seen one
+                // case where they weren't. So it's better to be safe.
+                thread.sort_by(|a, b| a.no.cmp(&b.no));
+
+                let curr_meta = ThreadMetadata::from_thread(&thread);
+                if let Some(prev_meta) = self.thread_meta.remove(&(board, no)) {
+                    self.process_modified(board, no, thread, last_modified, &curr_meta, &prev_meta);
+                } else {
+                    debug!("/{}/ No. {}: Inserting thread", board, no);
+                    self.insert_posts(board, no, thread);
+                }
+
+                if !curr_meta.op_data.archived {
+                    self.thread_meta.insert((board, no), curr_meta);
+                }
+            }
+            Err(err) => match err {
+                FetchError::NotModified => {}
+                FetchError::NotFound(_) => {
+                    if from_archive_json {
+                        // If a thread loaded from archive.json 404's, then it expired before we
+                        // could process it, and was not deleted. So, we don't mark it as such.
+                        warn!(
+                            "/{}/ No. {}: Archived thread expired before it could be processed",
+                            board, no,
                         );
                     } else {
-                        debug!("/{}/ No. {}: Inserting thread", board, no);
-                        act.insert_posts(board, no, thread);
-                    }
-
-                    if !curr_meta.op_data.archived {
-                        act.thread_meta.insert((board, no), curr_meta);
+                        warn!(
+                            "/{}/ No. {}: Thread deleted before it could be processed",
+                            board, no,
+                        );
+                        self.thread_meta.remove(&(board, no));
+                        self.remove_posts(board, vec![(no, RemovedStatus::Deleted)], Utc::now());
                     }
                 }
-                Err(err) => match err {
-                    FetchError::NotModified => {}
-                    FetchError::NotFound(_) => {
-                        if from_archive_json {
-                            // If a thread loaded from archive.json 404's, then it expired before we
-                            // could process it, and was not deleted. So, we don't mark it as such.
-                            warn!(
-                                "/{}/ No. {}: Archived thread expired before it could be processed",
-                                board, no,
-                            );
-                        } else {
-                            warn!(
-                                "/{}/ No. {}: Thread deleted before it could be processed",
-                                board, no,
-                            );
-                            act.thread_meta.remove(&(board, no));
-                            act.remove_posts(board, vec![(no, RemovedStatus::Deleted)], Utc::now());
-                        }
-                    }
-                    _ => error!("/{}/ No. {} fetch failed: {}", board, no, err),
-                },
-            });
-        ctx.spawn(future);
+                _ => error!("/{}/ No. {} fetch failed: {}", board, no, err),
+            },
+        }
+    }
+}
+
+impl Handler<FetchedThread> for ThreadUpdater {
+    type Result = ();
+
+    fn handle(&mut self, msg: FetchedThread, _: &mut Self::Context) {
+        self.process_thread(msg);
     }
 }
 
 impl Handler<BoardUpdate> for ThreadUpdater {
     type Result = ();
 
-    fn handle(&mut self, msg: BoardUpdate, ctx: &mut Self::Context) {
+    fn handle(&mut self, msg: BoardUpdate, _: &mut Self::Context) {
         let mut removed_threads = vec![];
         let BoardUpdate(board, updates, last_modified) = msg;
 
         for thread in updates {
             use self::ThreadUpdate::*;
             match thread {
-                New(no) | Modified(no) => self.process_thread(board, no, ctx, false),
+                New(no) | Modified(no) => Arbiter::spawn(
+                    self.fetcher
+                        .send(FetchThread(board, no, false))
+                        .map_err(|err| log_error!(&err)),
+                ),
                 BumpedOff(no) => {
                     // If this thread isn't in the map, it's already been archived or deleted
                     if self.thread_meta.contains_key(&(board, no)) {
                         if board.is_archived() && self.refetch_archived_threads {
                             debug!("/{}/ No. {}: Bumped off, refetching", board, no);
-                            self.process_thread(board, no, ctx, false);
+                            Arbiter::spawn(
+                                self.fetcher
+                                    .send(FetchThread(board, no, false))
+                                    .map_err(|err| log_error!(&err)),
+                            );
                         } else {
                             debug!("/{}/ No. {}: Bumped off", board, no);
                             if board.is_archived() || self.always_add_archive_times {
@@ -288,7 +288,7 @@ impl Handler<ArchiveUpdate> for ThreadUpdater {
             self.database
                 .send(GetUnarchivedThreads(board, nums))
                 .into_actor(self)
-                .map(move |res, act, ctx| match res {
+                .map(move |res, act, _| match res {
                     Ok(threads) => {
                         let len = threads.len();
                         debug!(
@@ -298,7 +298,11 @@ impl Handler<ArchiveUpdate> for ThreadUpdater {
                             if len == 1 { "" } else { "s" },
                         );
                         for no in threads {
-                            act.process_thread(board, no, ctx, true);
+                            Arbiter::spawn(
+                                act.fetcher
+                                    .send(FetchThread(board, no, true))
+                                    .map_err(|err| log_error!(&err)),
+                            );
                         }
                     }
                     Err(err) => error!("/{}/: Failed to process archived threads: {}", board, err),

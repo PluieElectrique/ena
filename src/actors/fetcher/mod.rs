@@ -25,11 +25,13 @@ use tokio::runtime::Runtime;
 mod rate_limiter;
 
 use self::rate_limiter::{Consume, RateLimiter};
+use actors::ThreadUpdater;
 use four_chan::*;
 use RateLimitingConfig;
 
 type HttpsClient = Client<HttpsConnector<HttpConnector>>;
 
+const FETCHER_MAILBOX_CAPACITY: usize = 500;
 const RFC_1123_FORMAT: &str = "%a, %d %b %Y %T GMT";
 const MEDIA_CHANNEL_CAPACITY: usize = 1000;
 const THREAD_CHANNEL_CAPACITY: usize = 500;
@@ -41,7 +43,7 @@ pub struct Fetcher {
     client: Arc<HttpsClient>,
     last_modified: HashMap<LastModifiedKey, DateTime<Utc>>,
     media_rl_sender: Sender<FetchMedia>,
-    thread_rl_sender: Sender<Box<Future<Item = (), Error = ()>>>,
+    thread_rl_sender: Sender<(FetchThread, DateTime<Utc>)>,
     thread_list_rl_sender: Sender<Box<Future<Item = (), Error = ()>>>,
     // Fetcher must use its own runtime for fetching media because tokio::fs functions can't use the
     // current_thread runtime that Actix provides
@@ -52,7 +54,6 @@ impl Actor for Fetcher {
     type Context = Context<Self>;
 
     fn started(&mut self, ctx: &mut Self::Context) {
-        ctx.set_mailbox_capacity(500);
         // Clean up old Last-Modified values so that we don't leak memory
         ctx.run_interval(Duration::from_secs(86400), |act, _ctx| {
             let yesterday = Utc::now() - chrono::Duration::days(1);
@@ -62,11 +63,35 @@ impl Actor for Fetcher {
 }
 
 impl Fetcher {
-    pub fn new(
+    pub fn create(
         media_path: &Path,
         media_rl_config: &RateLimitingConfig,
         thread_rl_config: &RateLimitingConfig,
         thread_list_rl_config: &RateLimitingConfig,
+        thread_updater: Addr<ThreadUpdater>,
+    ) -> Result<Addr<Self>, Error> {
+        let ctx = {
+            let (_, receiver) = actix::dev::channel::channel(FETCHER_MAILBOX_CAPACITY);
+            Context::with_receiver(receiver)
+        };
+        let fetcher = Fetcher::new(
+            media_path,
+            media_rl_config,
+            thread_rl_config,
+            thread_list_rl_config,
+            thread_updater,
+            ctx.address(),
+        )?;
+        Ok(ctx.run(fetcher))
+    }
+
+    fn new(
+        media_path: &Path,
+        media_rl_config: &RateLimitingConfig,
+        thread_rl_config: &RateLimitingConfig,
+        thread_list_rl_config: &RateLimitingConfig,
+        thread_updater: Addr<ThreadUpdater>,
+        fetcher: Addr<Self>,
     ) -> Result<Self, Error> {
         std::fs::create_dir_all(media_path).context("Could not create media directory")?;
         {
@@ -96,8 +121,21 @@ impl Fetcher {
             sender
         };
 
-        let (thread_rl_sender, receiver) = mpsc::channel(THREAD_CHANNEL_CAPACITY);
-        Arbiter::spawn(Consume::new(RateLimiter::new(receiver, thread_rl_config)));
+        let thread_rl_sender = {
+            let (sender, receiver) = mpsc::channel(THREAD_CHANNEL_CAPACITY);
+            let client = client.clone();
+            let stream = receiver.map(move |(msg, last_modified)| {
+                fetch_thread(
+                    msg,
+                    last_modified,
+                    &client,
+                    fetcher.clone(),
+                    thread_updater.clone(),
+                )
+            });
+            Arbiter::spawn(Consume::new(RateLimiter::new(stream, thread_rl_config)));
+            sender
+        };
 
         let (thread_list_rl_sender, receiver) = mpsc::channel(THREAD_LIST_CHANNEL_CAPACITY);
         Arbiter::spawn(Consume::new(RateLimiter::new(
@@ -292,10 +330,8 @@ impl Handler<UpdateLastModified> for Fetcher {
     }
 }
 
-pub struct FetchThread(pub Board, pub u64);
-impl Message for FetchThread {
-    type Result = Result<(Vec<Post>, DateTime<Utc>), FetchError>;
-}
+#[derive(Message)]
+pub struct FetchThread(pub Board, pub u64, pub bool);
 
 impl<'a> ToUri for &'a FetchThread {
     fn to_uri(&self) -> Uri {
@@ -306,27 +342,49 @@ impl<'a> ToUri for &'a FetchThread {
 }
 
 impl Handler<FetchThread> for Fetcher {
-    type Result = RateLimitedResponse<(Vec<Post>, DateTime<Utc>), FetchError>;
+    type Result = ();
 
-    fn handle(&mut self, msg: FetchThread, ctx: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, msg: FetchThread, _: &mut Self::Context) {
         let last_modified = self.get_last_modified(&msg);
-        let future = Box::new(
-            fetch_with_last_modified(&msg, last_modified, &self.client, ctx.address())
-                .from_err()
-                .and_then(move |(body, last_modified)| {
-                    let PostsWrapper { posts } = serde_json::from_slice(&body)?;
-                    if posts.is_empty() {
-                        Err(FetchError::EmptyData)
-                    } else {
-                        Ok((posts, last_modified))
-                    }
-                }),
+
+        Arbiter::spawn(
+            self.thread_rl_sender
+                .clone()
+                .send((msg, last_modified))
+                .map(|_| ())
+                .map_err(|err| error!("{}", err)),
         );
-        RateLimitedResponse {
-            sender: self.thread_rl_sender.clone(),
-            future,
-        }
     }
+}
+
+#[derive(Message)]
+pub struct FetchedThread {
+    pub request: FetchThread,
+    pub result: Result<(Vec<Post>, DateTime<Utc>), FetchError>,
+}
+
+fn fetch_thread(
+    msg: FetchThread,
+    last_modified: DateTime<Utc>,
+    client: &Arc<HttpsClient>,
+    fetcher: Addr<Fetcher>,
+    thread_updater: Addr<ThreadUpdater>,
+) -> impl Future<Item = (), Error = ()> {
+    fetch_with_last_modified(&msg, last_modified, client, fetcher)
+        .and_then(move |(body, last_modified)| {
+            let PostsWrapper { posts } = serde_json::from_slice(&body)?;
+            if posts.is_empty() {
+                Err(FetchError::EmptyData)
+            } else {
+                Ok((posts, last_modified))
+            }
+        }).then(move |result| {
+            let reply = FetchedThread {
+                request: msg,
+                result,
+            };
+            thread_updater.send(reply).map_err(|err| log_error!(&err))
+        })
 }
 
 pub struct FetchThreadList(pub Board);
