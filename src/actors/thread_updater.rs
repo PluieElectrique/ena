@@ -288,31 +288,22 @@ impl Handler<ArchiveUpdate> for ThreadUpdater {
             self.database
                 .send(GetUnarchivedThreads(board, nums))
                 .into_actor(self)
-                .map(move |res, act, ctx| {
-                    match res {
-                        Ok(threads) => {
-                            let len = threads.len();
-                            debug!(
-                                "/{}/: Found {} new archived thread{}",
-                                board,
-                                len,
-                                if len == 1 { "" } else { "s" },
-                            );
-                            for no in threads {
-                                act.process_thread(board, no, ctx, true);
-                            }
+                .map(move |res, act, ctx| match res {
+                    Ok(threads) => {
+                        let len = threads.len();
+                        debug!(
+                            "/{}/: Found {} new archived thread{}",
+                            board,
+                            len,
+                            if len == 1 { "" } else { "s" },
+                        );
+                        for no in threads {
+                            act.process_thread(board, no, ctx, true);
                         }
-                        Err(err) => error!(
-                            "/{}/: Failed to process archived threads: {}",
-                            board, err
-                        ),
                     }
-                })
-                .map_err(move |err, _act, _ctx| {
-                    error!(
-                        "/{}/: Failed to process archived threads: {}",
-                        board, err
-                    )
+                    Err(err) => error!("/{}/: Failed to process archived threads: {}", board, err),
+                }).map_err(move |err, _act, _ctx| {
+                    error!("/{}/: Failed to process archived threads: {}", board, err)
                 }),
         );
     }
