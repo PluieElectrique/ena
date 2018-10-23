@@ -115,68 +115,74 @@ impl Fetcher {
         })
     }
 
-    fn fetch_with_last_modified<'a, M: 'a>(
-        &mut self,
-        msg: &'a M,
-        ctx: &Context<Self>,
-    ) -> impl Future<Item = (hyper::Chunk, DateTime<Utc>), Error = FetchError>
+    fn get_last_modified<'a, K: 'a>(&self, key: &'a K) -> DateTime<Utc>
     where
-        &'a M: ToUri + Into<LastModifiedKey>,
+        &'a K: Into<LastModifiedKey>,
     {
-        let uri = msg.to_uri();
-        let mut request = Request::get(uri.clone()).body(Body::default()).unwrap();
-        let key = msg.into();
-        let myself = ctx.address();
-
-        let last_modified = self
-            .last_modified
-            .get(&key)
+        self.last_modified
+            .get(&key.into())
             .cloned()
-            .unwrap_or_else(|| Utc.timestamp(1_065_062_160, 0));
-        {
-            let headers = request.headers_mut();
-            headers.reserve(1);
-            headers.insert(
-                header::IF_MODIFIED_SINCE,
-                HeaderValue::from_str(last_modified.format(RFC_1123_FORMAT).to_string().as_str())
-                    .unwrap(),
-            );
-        }
-        let client = self.client.clone();
-        future::lazy(move || client.request(request))
-            .from_err()
-            .and_then(move |res| match res.status() {
-                StatusCode::NOT_FOUND => Err(FetchError::NotFound(uri.to_string())),
-                StatusCode::NOT_MODIFIED => Err(FetchError::NotModified),
-                StatusCode::OK => {
-                    let new_modified = res
-                        .headers()
-                        .get(header::LAST_MODIFIED)
-                        .map(|new| {
-                            Utc.datetime_from_str(new.to_str().unwrap(), RFC_1123_FORMAT)
-                                .unwrap()
-                        }).unwrap_or_else(Utc::now);
-
-                    if last_modified > new_modified {
-                        warn!(
-                            "API sent old data: If-Modified-Since: {}, but Last-Modified: {}",
-                            last_modified.format(RFC_1123_FORMAT),
-                            new_modified.format(RFC_1123_FORMAT),
-                        );
-                        Err(FetchError::NotModified)
-                    } else {
-                        Ok((res, new_modified))
-                    }
-                }
-                _ => Err(res.status().into()),
-            }).and_then(move |(res, last_modified)| {
-                myself
-                    .send(UpdateLastModified(key, last_modified))
-                    .from_err()
-                    .and_then(|_| res.into_body().concat2().from_err())
-                    .map(move |body| (body, last_modified))
-            })
+            .unwrap_or_else(|| Utc.timestamp(1_065_062_160, 0))
     }
+}
+
+fn fetch_with_last_modified<'a, M: 'a>(
+    msg: &'a M,
+    last_modified: DateTime<Utc>,
+    client: &Arc<HttpsClient>,
+    fetcher: Addr<Fetcher>,
+) -> impl Future<Item = (hyper::Chunk, DateTime<Utc>), Error = FetchError>
+where
+    &'a M: ToUri + Into<LastModifiedKey>,
+{
+    let uri = msg.to_uri();
+    let key = msg.into();
+
+    let mut request = Request::get(uri.clone()).body(Body::default()).unwrap();
+    {
+        let headers = request.headers_mut();
+        headers.reserve(1);
+        headers.insert(
+            header::IF_MODIFIED_SINCE,
+            HeaderValue::from_str(last_modified.format(RFC_1123_FORMAT).to_string().as_str())
+                .unwrap(),
+        );
+    }
+
+    client
+        .request(request)
+        .from_err()
+        .and_then(move |res| match res.status() {
+            StatusCode::NOT_FOUND => Err(FetchError::NotFound(uri.to_string())),
+            StatusCode::NOT_MODIFIED => Err(FetchError::NotModified),
+            StatusCode::OK => {
+                let new_modified = res
+                    .headers()
+                    .get(header::LAST_MODIFIED)
+                    .map(|new| {
+                        Utc.datetime_from_str(new.to_str().unwrap(), RFC_1123_FORMAT)
+                            .unwrap()
+                    }).unwrap_or_else(Utc::now);
+
+                if last_modified > new_modified {
+                    warn!(
+                        "API sent old data: If-Modified-Since: {}, but Last-Modified: {}",
+                        last_modified.format(RFC_1123_FORMAT),
+                        new_modified.format(RFC_1123_FORMAT),
+                    );
+                    Err(FetchError::NotModified)
+                } else {
+                    Ok((res, new_modified))
+                }
+            }
+            _ => Err(res.status().into()),
+        }).and_then(move |(res, last_modified)| {
+            fetcher
+                .send(UpdateLastModified(key, last_modified))
+                .from_err()
+                .and_then(|_| res.into_body().concat2().from_err())
+                .map(move |body| (body, last_modified))
+        })
 }
 
 /// `(board, Some(no))` represents a thread and `(board, None)` represents the `threads.json` of that board.
@@ -303,16 +309,19 @@ impl Handler<FetchThread> for Fetcher {
     type Result = RateLimitedResponse<(Vec<Post>, DateTime<Utc>), FetchError>;
 
     fn handle(&mut self, msg: FetchThread, ctx: &mut Self::Context) -> Self::Result {
-        let future = Box::new(self.fetch_with_last_modified(&msg, ctx).from_err().and_then(
-            move |(body, last_modified)| {
-                let PostsWrapper { posts } = serde_json::from_slice(&body)?;
-                if posts.is_empty() {
-                    Err(FetchError::EmptyData)
-                } else {
-                    Ok((posts, last_modified))
-                }
-            },
-        ));
+        let last_modified = self.get_last_modified(&msg);
+        let future = Box::new(
+            fetch_with_last_modified(&msg, last_modified, &self.client, ctx.address())
+                .from_err()
+                .and_then(move |(body, last_modified)| {
+                    let PostsWrapper { posts } = serde_json::from_slice(&body)?;
+                    if posts.is_empty() {
+                        Err(FetchError::EmptyData)
+                    } else {
+                        Ok((posts, last_modified))
+                    }
+                }),
+        );
         RateLimitedResponse {
             sender: self.thread_rl_sender.clone(),
             future,
@@ -336,23 +345,26 @@ impl<'a> ToUri for &'a FetchThreadList {
 impl Handler<FetchThreadList> for Fetcher {
     type Result = RateLimitedResponse<(Vec<Thread>, DateTime<Utc>), FetchError>;
     fn handle(&mut self, msg: FetchThreadList, ctx: &mut Self::Context) -> Self::Result {
-        let future = Box::new(self.fetch_with_last_modified(&msg, ctx).from_err().and_then(
-            move |(body, last_modified)| {
-                let threads: Vec<ThreadPage> = serde_json::from_slice(&body)?;
-                let mut threads = threads.into_iter().fold(vec![], |mut acc, mut page| {
-                    acc.append(&mut page.threads);
-                    acc
-                });
-                for (i, thread) in threads.iter_mut().enumerate() {
-                    thread.bump_index = i;
-                }
-                if threads.is_empty() {
-                    Err(FetchError::EmptyData)
-                } else {
-                    Ok((threads, last_modified))
-                }
-            },
-        ));
+        let last_modified = self.get_last_modified(&msg);
+        let future = Box::new(
+            fetch_with_last_modified(&msg, last_modified, &self.client, ctx.address())
+                .from_err()
+                .and_then(move |(body, last_modified)| {
+                    let threads: Vec<ThreadPage> = serde_json::from_slice(&body)?;
+                    let mut threads = threads.into_iter().fold(vec![], |mut acc, mut page| {
+                        acc.append(&mut page.threads);
+                        acc
+                    });
+                    for (i, thread) in threads.iter_mut().enumerate() {
+                        thread.bump_index = i;
+                    }
+                    if threads.is_empty() {
+                        Err(FetchError::EmptyData)
+                    } else {
+                        Ok((threads, last_modified))
+                    }
+                }),
+        );
         RateLimitedResponse {
             sender: self.thread_list_rl_sender.clone(),
             future,
