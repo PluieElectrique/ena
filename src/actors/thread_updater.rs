@@ -236,27 +236,20 @@ impl Handler<BoardUpdate> for ThreadUpdater {
     type Result = ();
 
     fn handle(&mut self, msg: BoardUpdate, _: &mut Self::Context) {
+        let mut threads_to_fetch = vec![];
         let mut removed_threads = vec![];
         let BoardUpdate(board, updates, last_modified) = msg;
 
         for thread in updates {
             use self::ThreadUpdate::*;
             match thread {
-                New(no) | Modified(no) => Arbiter::spawn(
-                    self.fetcher
-                        .send(FetchThread(board, no, false))
-                        .map_err(|err| log_error!(&err)),
-                ),
+                New(no) | Modified(no) => threads_to_fetch.push(no),
                 BumpedOff(no) => {
                     // If this thread isn't in the map, it's already been archived or deleted
                     if self.thread_meta.contains_key(&(board, no)) {
                         if board.is_archived() && self.refetch_archived_threads {
                             debug!("/{}/ No. {}: Bumped off, refetching", board, no);
-                            Arbiter::spawn(
-                                self.fetcher
-                                    .send(FetchThread(board, no, false))
-                                    .map_err(|err| log_error!(&err)),
-                            );
+                            threads_to_fetch.push(no);
                         } else {
                             debug!("/{}/ No. {}: Bumped off", board, no);
                             if board.is_archived() || self.always_add_archive_times {
@@ -276,6 +269,13 @@ impl Handler<BoardUpdate> for ThreadUpdater {
             }
         }
         self.remove_posts(board, removed_threads, last_modified);
+        if !threads_to_fetch.is_empty() {
+            Arbiter::spawn(
+                self.fetcher
+                    .send(FetchThreads(board, threads_to_fetch, false))
+                    .map_err(|err| log_error!(&err)),
+            );
+        }
     }
 }
 
@@ -297,10 +297,10 @@ impl Handler<ArchiveUpdate> for ThreadUpdater {
                             len,
                             if len == 1 { "" } else { "s" },
                         );
-                        for no in threads {
+                        if !threads.is_empty() {
                             Arbiter::spawn(
                                 act.fetcher
-                                    .send(FetchThread(board, no, true))
+                                    .send(FetchThreads(board, threads, true))
                                     .map_err(|err| log_error!(&err)),
                             );
                         }

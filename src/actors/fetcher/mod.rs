@@ -43,7 +43,7 @@ pub struct Fetcher {
     client: Arc<HttpsClient>,
     last_modified: HashMap<LastModifiedKey, DateTime<Utc>>,
     media_rl_sender: Sender<FetchMedia>,
-    thread_rl_sender: Sender<(FetchThread, DateTime<Utc>)>,
+    thread_rl_sender: Sender<(FetchThreads, Vec<DateTime<Utc>>)>,
     thread_list_rl_sender: Sender<Box<Future<Item = (), Error = ()>>>,
     // Fetcher must use its own runtime for fetching media because tokio::fs functions can't use the
     // current_thread runtime that Actix provides
@@ -124,15 +124,24 @@ impl Fetcher {
         let thread_rl_sender = {
             let (sender, receiver) = mpsc::channel(THREAD_CHANNEL_CAPACITY);
             let client = client.clone();
-            let stream = receiver.map(move |(msg, last_modified)| {
-                fetch_thread(
-                    msg,
-                    last_modified,
-                    &client,
-                    fetcher.clone(),
-                    thread_updater.clone(),
-                )
-            });
+            let stream = receiver
+                .map(|(msg, last_modified): (FetchThreads, Vec<DateTime<Utc>>)| {
+                    let FetchThreads(board, nums, from_archive_json) = msg;
+                    stream::iter_ok(nums.into_iter().zip(last_modified.into_iter())).map(
+                        move |(no, last_modified)| {
+                            (FetchThread(board, no, from_archive_json), last_modified)
+                        },
+                    )
+                }).flatten()
+                .map(move |(msg, last_modified)| {
+                    fetch_thread(
+                        msg,
+                        last_modified,
+                        &client,
+                        fetcher.clone(),
+                        thread_updater.clone(),
+                    )
+                });
             Arbiter::spawn(Consume::new(RateLimiter::new(stream, thread_rl_config)));
             sender
         };
@@ -224,17 +233,24 @@ where
 }
 
 /// `(board, Some(no))` represents a thread and `(board, None)` represents the `threads.json` of that board.
-type LastModifiedKey = (Board, Option<u64>);
+#[derive(Debug, Eq, Hash, PartialEq)]
+struct LastModifiedKey(Board, Option<u64>);
+
+impl<'a> From<&'a (Board, u64)> for LastModifiedKey {
+    fn from(msg: &(Board, u64)) -> Self {
+        LastModifiedKey(msg.0, Some(msg.1))
+    }
+}
 
 impl<'a> From<&'a FetchThread> for LastModifiedKey {
     fn from(msg: &FetchThread) -> Self {
-        (msg.0, Some(msg.1))
+        LastModifiedKey(msg.0, Some(msg.1))
     }
 }
 
 impl<'a> From<&'a FetchThreadList> for LastModifiedKey {
     fn from(msg: &FetchThreadList) -> Self {
-        (msg.0, None)
+        LastModifiedKey(msg.0, None)
     }
 }
 
@@ -330,7 +346,6 @@ impl Handler<UpdateLastModified> for Fetcher {
     }
 }
 
-#[derive(Message)]
 pub struct FetchThread(pub Board, pub u64, pub bool);
 
 impl<'a> ToUri for &'a FetchThread {
@@ -341,11 +356,19 @@ impl<'a> ToUri for &'a FetchThread {
     }
 }
 
-impl Handler<FetchThread> for Fetcher {
+#[derive(Message)]
+pub struct FetchThreads(pub Board, pub Vec<u64>, pub bool);
+
+impl Handler<FetchThreads> for Fetcher {
     type Result = ();
 
-    fn handle(&mut self, msg: FetchThread, _: &mut Self::Context) {
-        let last_modified = self.get_last_modified(&msg);
+    fn handle(&mut self, msg: FetchThreads, _: &mut Self::Context) {
+        let board = msg.0;
+        let last_modified = msg
+            .1
+            .iter()
+            .map(|&no| self.get_last_modified(&(board, no)))
+            .collect();
 
         Arbiter::spawn(
             self.thread_rl_sender
