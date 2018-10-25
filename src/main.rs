@@ -13,6 +13,8 @@ use actix::prelude::*;
 use ena::actors::*;
 use ena::*;
 
+const THREAD_UPDATER_MAILBOX_CAPACITY: usize = 500;
+
 fn main() {
     pretty_env_logger::init();
     info!("Ena is starting");
@@ -41,8 +43,7 @@ fn main() {
         .start(|_| database);
 
     let thread_updater_ctx = {
-        // 16 is the default mailbox capacity
-        let (_, receiver) = actix::dev::channel::channel(16);
+        let (_, receiver) = actix::dev::channel::channel(THREAD_UPDATER_MAILBOX_CAPACITY);
         Context::with_receiver(receiver)
     };
 

@@ -10,6 +10,8 @@ use tokio::runtime::Runtime;
 use four_chan::{Board, OpData, Post};
 use html;
 
+const DATABASE_MAILBOX_CAPACITY: usize = 1000;
+
 const BOARD_REPLACE: &str = "%%BOARD%%";
 const CHARSET_REPLACE: &str = "%%CHARSET%%";
 const BOARD_SQL: &str = include_str!("../sql/boards.sql");
@@ -138,6 +140,10 @@ impl Database {
 
 impl Actor for Database {
     type Context = Context<Self>;
+
+    fn started(&mut self, ctx: &mut Self::Context) {
+        ctx.set_mailbox_capacity(DATABASE_MAILBOX_CAPACITY);
+    }
 }
 
 pub struct GetUnarchivedThreads(pub Board, pub Vec<u64>);

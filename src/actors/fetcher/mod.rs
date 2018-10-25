@@ -31,8 +31,10 @@ use RateLimitingConfig;
 
 type HttpsClient = Client<HttpsConnector<HttpConnector>>;
 
-const FETCHER_MAILBOX_CAPACITY: usize = 500;
 const RFC_1123_FORMAT: &str = "%a, %d %b %Y %T GMT";
+
+const FETCHER_MAILBOX_CAPACITY: usize = 500;
+
 const MEDIA_CHANNEL_CAPACITY: usize = 1000;
 const THREAD_CHANNEL_CAPACITY: usize = 500;
 const THREAD_LIST_CHANNEL_CAPACITY: usize = 200;
