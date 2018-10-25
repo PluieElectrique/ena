@@ -36,7 +36,7 @@ By default, only errors are logged. Logging is configured by setting the `RUST_L
 
 ### Post/media processing
 
-* `[sjis]` and `[qstcolor]` tags are supported
+* `[sjis]`, `[qstcolor]`, `[i]`, and `[u]` tags are supported. /qst/ bold and italic text is also supported
 * The `XX` and `A1` country flags are not ignored
 * A fixed set of HTML character references ("entities") are replaced in usernames and titles (In addition to the references Ena replaces, Asagi also replaces all numeric character references of the form `&#\d+;`)
 * Posts are not trimmed of whitespace (Asagi trims whitespace from the start and end of each line)
