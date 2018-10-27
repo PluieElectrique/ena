@@ -210,7 +210,10 @@ where
                     .get(header::LAST_MODIFIED)
                     .map(|new| {
                         Utc.datetime_from_str(new.to_str().unwrap(), RFC_1123_FORMAT)
-                            .unwrap()
+                            .unwrap_or_else(|err| {
+                                error!("Could not parse Last-Modified header: {}", err);
+                                Utc::now()
+                            })
                     }).unwrap_or_else(Utc::now);
 
                 if last_modified > new_modified {
