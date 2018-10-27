@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
-use actix::dev::{MessageResponse, ResponseChannel};
+use actix::dev::ResponseChannel;
 use actix::prelude::*;
 use chrono;
 use chrono::prelude::*;
@@ -23,9 +23,11 @@ use tokio;
 use tokio::runtime::Runtime;
 
 mod error;
+mod helper;
 mod rate_limiter;
 
 pub use self::error::FetchError;
+use self::helper::*;
 use self::rate_limiter::{Consume, RateLimiter};
 use actors::ThreadUpdater;
 use four_chan::*;
@@ -237,56 +239,6 @@ where
                 .and_then(|_| res.into_body().concat2().from_err())
                 .map(move |body| (body, last_modified))
         })
-}
-
-/// `(board, Some(no))` represents a thread and `(board, None)` represents the `threads.json` of that board.
-#[derive(Debug, Eq, Hash, PartialEq)]
-struct LastModifiedKey(Board, Option<u64>);
-
-impl<'a> From<&'a (Board, u64)> for LastModifiedKey {
-    fn from(msg: &(Board, u64)) -> Self {
-        LastModifiedKey(msg.0, Some(msg.1))
-    }
-}
-
-impl<'a> From<&'a FetchThread> for LastModifiedKey {
-    fn from(msg: &FetchThread) -> Self {
-        LastModifiedKey(msg.0, Some(msg.1))
-    }
-}
-
-impl<'a> From<&'a FetchThreadList> for LastModifiedKey {
-    fn from(msg: &FetchThreadList) -> Self {
-        LastModifiedKey(msg.0, None)
-    }
-}
-
-pub struct RateLimitedResponse<I, E> {
-    sender: Sender<Box<Future<Item = (), Error = ()>>>,
-    future: Box<Future<Item = I, Error = E>>,
-}
-
-impl<A, M, I: 'static, E: 'static> MessageResponse<A, M> for RateLimitedResponse<I, E>
-where
-    A: Actor,
-    M: Message<Result = Result<I, E>>,
-{
-    fn handle<R: ResponseChannel<M>>(self, _: &mut A::Context, tx: Option<R>) {
-        Arbiter::spawn(
-            self.sender
-                .send(Box::new(self.future.then(move |res| {
-                    if let Some(tx) = tx {
-                        tx.send(res);
-                    }
-                    Ok(())
-                }))).map(|_| ())
-                .map_err(|err| error!("Failed to send RateLimitedResponse future: {}", err)),
-        )
-    }
-}
-
-trait ToUri {
-    fn to_uri(&self) -> Uri;
 }
 
 // We would like to return an ActorFuture from Fetcher, but we can't because ActorFutures can only
