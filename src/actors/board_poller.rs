@@ -81,16 +81,18 @@ impl BoardPoller {
         let mut updates = vec![];
 
         let push_removed = {
-            let last_no = curr_threads[curr_threads.len() - 1].no;
+            let last_thread = &curr_threads[curr_threads.len() - 1];
             let anchor_index = self
                 .threads[&board]
                 .iter()
                 .rev()
-                // We don't check that last_modified hasn't changed. This means there is a slight
-                // chance that the heuristic will fail when there is enough time between polls for
-                // the anchor to be bumped to the top and fall back to the bottom. But, boards
-                // usually aren't that fast and our poll interval is small, so this is unlikely.
-                .find(|thread| thread.no == last_no)
+                .find(|thread| thread.no == last_thread.no)
+                // If a board is fast and our poll interval is long, a bumped thread might have
+                // enough time to fall to the bottom of the board. This could cause bumped-off
+                // threads to be marked as deleted. So, we check that last_modified hasn't changed.
+                // Sage posts will also trigger this check, but that's okay, because we'd rather
+                // reject good anchors than accept incorrect ones.
+                .filter(|thread| thread.last_modified == last_thread.last_modified)
                 .map(|thread| thread.bump_index);
 
             move |thread: &Thread, updates: &mut Vec<_>| {
