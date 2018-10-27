@@ -75,6 +75,7 @@ use failure::{Error, ResultExt};
 pub struct Config {
     pub boards: Vec<four_chan::Board>,
     pub poll_interval: u64,
+    pub fetch_archive: bool,
     pub download_media: bool,
     pub download_thumbs: bool,
     pub media_rate_limiting: RateLimitingConfig,

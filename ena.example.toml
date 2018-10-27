@@ -6,6 +6,9 @@ boards = [""]
 # Seconds to wait between fetching the threads.json of each board
 poll_interval = 60
 
+# On startup, fetch (and potentially update) threads from archive.json
+fetch_archive = true
+
 # Download full image/media files
 download_media = true
 # Download thumbnails

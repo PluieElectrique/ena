@@ -32,6 +32,7 @@ pub struct BoardPoller {
     boards: Vec<Board>,
     threads: HashMap<Board, Vec<Thread>>,
     interval: Duration,
+    fetch_archive: bool,
     thread_updater: Arc<Addr<ThreadUpdater>>,
     fetcher: Addr<Fetcher>,
 }
@@ -41,7 +42,7 @@ impl Actor for BoardPoller {
 
     fn started(&mut self, ctx: &mut Context<Self>) {
         for &board in &self.boards {
-            if board.is_archived() {
+            if self.fetch_archive && board.is_archived() {
                 self.poll_archive(board, ctx);
             }
             self.poll(board, ctx);
@@ -53,6 +54,7 @@ impl BoardPoller {
     pub fn new(
         boards: &[Board],
         interval: Duration,
+        fetch_archive: bool,
         thread_updater: Addr<ThreadUpdater>,
         fetcher: Addr<Fetcher>,
     ) -> Self {
@@ -66,6 +68,7 @@ impl BoardPoller {
             boards: boards.to_owned(),
             threads,
             interval,
+            fetch_archive,
             thread_updater: Arc::new(thread_updater),
             fetcher,
         }

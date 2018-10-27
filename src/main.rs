@@ -68,6 +68,7 @@ fn main() {
     BoardPoller::new(
         &config.boards,
         Duration::from_secs(config.poll_interval),
+        config.fetch_archive,
         thread_updater,
         fetcher,
     ).start();
