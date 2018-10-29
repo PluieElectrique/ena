@@ -1,11 +1,12 @@
 extern crate actix;
 extern crate ena;
+extern crate env_logger;
 extern crate failure;
 #[macro_use]
 extern crate log;
 extern crate mysql_async as my;
-extern crate pretty_env_logger;
 
+use std::io::Write;
 use std::process;
 use std::time::Duration;
 
@@ -16,7 +17,22 @@ use ena::*;
 const THREAD_UPDATER_MAILBOX_CAPACITY: usize = 500;
 
 fn main() {
-    pretty_env_logger::init();
+    env_logger::Builder::from_default_env()
+        .format(|fmt, record| {
+            let level = record.level();
+            let level_style = fmt.default_level_style(level);
+            let timestamp = fmt.timestamp();
+            let args = record.args();
+
+            writeln!(
+                fmt,
+                "{:>5} {} >    {}",
+                level_style.value(level),
+                timestamp,
+                args
+            )
+        }).init();
+
     info!("Ena is starting");
 
     let config = parse_config().unwrap_or_else(|err| {
