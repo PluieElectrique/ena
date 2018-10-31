@@ -85,8 +85,7 @@ impl BoardPoller {
 
         let push_removed = {
             let last_thread = &curr_threads[curr_threads.len() - 1];
-            let anchor_index = self
-                .threads[&board]
+            let anchor_index = self.threads[&board]
                 .iter()
                 .rev()
                 .find(|thread| thread.no == last_thread.no)
