@@ -1,7 +1,6 @@
 use std;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -22,10 +21,12 @@ use serde_json;
 use tokio;
 use tokio::runtime::Runtime;
 
+mod delay_queue;
 mod error;
 mod helper;
 mod rate_limiter;
 
+use self::delay_queue::DelayQueue;
 pub use self::error::FetchError;
 use self::helper::*;
 use self::rate_limiter::{Consume, RateLimiter};
@@ -42,6 +43,13 @@ const FETCHER_MAILBOX_CAPACITY: usize = 500;
 const MEDIA_CHANNEL_CAPACITY: usize = 1000;
 const THREAD_CHANNEL_CAPACITY: usize = 500;
 const THREAD_LIST_CHANNEL_CAPACITY: usize = 200;
+
+/// Request retry base delay in seconds.
+const REQUEST_RETRY_DELAY: u64 = 2;
+/// Request retry exponential delay multiplier. (d, d * m, d * m^2, d * m^3, ...)
+const REQUEST_RETRY_FACTOR: u64 = 2;
+/// Request retry maximum delay.
+const REQUEST_RETRY_MAX_DELAY: u64 = 256;
 
 /// An actor which fetches threads, thread lists, archives, and media from the 4chan API. Fetching
 /// the catalog or pages of a board or boards.json is not used and thus unsupported.
@@ -116,12 +124,20 @@ impl Fetcher {
             let (sender, receiver) = mpsc::channel(MEDIA_CHANNEL_CAPACITY);
             let client = client.clone();
             let media_path = media_path.to_owned();
+
+            let (retry_sender, retry_receiver) = mpsc::channel(MEDIA_CHANNEL_CAPACITY);
+
             let stream = receiver
                 .map(|FetchMedia(board, filenames)| {
-                    stream::iter_ok(filenames.into_iter().map(move |filename| (board, filename)))
+                    stream::iter_ok(
+                        filenames
+                            .into_iter()
+                            .map(move |filename| (board, filename, REQUEST_RETRY_DELAY)),
+                    )
                 }).flatten()
-                .map(move |(board, filename)| {
-                    fetch_media(board, filename, &client, media_path.clone())
+                .select(DelayQueue::new(retry_receiver))
+                .map(move |request| {
+                    fetch_media(request, &client, media_path.clone(), retry_sender.clone())
                 });
             runtime.spawn(Consume::new(RateLimiter::new(stream, media_rl_config)));
             sender
@@ -442,10 +458,10 @@ impl Handler<FetchMedia> for Fetcher {
 }
 
 fn fetch_media(
-    board: Board,
-    filename: String,
+    (board, filename, delay): (Board, String, u64),
     client: &Arc<HttpsClient>,
     media_path: PathBuf,
+    retry_sender: Sender<((Board, String, u64), Duration)>,
 ) -> impl Future<Item = (), Error = ()> {
     let is_thumb = filename.ends_with("s.jpg");
 
@@ -494,15 +510,47 @@ fn fetch_media(
                     .from_err::<FetchError>()
                     .map(|(file, _)| file)
             })
-        }).and_then(move |_| {
-            debug!(
-                "/{}/: Writing {}{}",
-                board,
-                if is_thumb { "" } else { " " },
-                filename
-            );
-            tokio::fs::rename(temp_path, real_path).from_err()
-        }).map_err(move |err| error!("/{}/: Failed to fetch media: {}", board, err));
+        }).and_then({
+            let filename = filename.clone();
+            move |_| {
+                debug!(
+                    "/{}/: Writing {}{}",
+                    board,
+                    if is_thumb { "" } else { " " },
+                    filename
+                );
+                tokio::fs::rename(temp_path, real_path).from_err()
+            }
+        }).then(move |res| {
+            use self::FetchError::*;
+            let should_retry = |err: &FetchError| match *err {
+                EmptyData | NotFound(_) | NotModified => false,
+                _ => true,
+            };
+
+            if let Err(err) = res {
+                if should_retry(&err) && delay <= REQUEST_RETRY_MAX_DELAY {
+                    error!(
+                        "/{}/: Failed to fetch media {}, retrying: {}",
+                        board, filename, err
+                    );
+                    let duration = Duration::from_secs(delay);
+                    return Either::B(
+                        retry_sender
+                            .send(((board, filename, delay * REQUEST_RETRY_FACTOR), duration))
+                            .map(|_| ())
+                            .map_err(|err| error!("{}", err)),
+                    );
+                } else {
+                    error!(
+                        "/{}/: Failed to fetch media {}, not retrying: {}",
+                        board, filename, err
+                    );
+                }
+            }
+
+            Either::A(future::ok(()))
+        });
 
     Either::B(future)
 }

@@ -41,7 +41,7 @@ By default, only errors are logged. Logging is configured by setting the `RUST_L
 * A fixed set of HTML character references ("entities") are replaced in usernames and titles (In addition to the references Ena replaces, Asagi also replaces all numeric character references of the form `&#\d+;`)
 * Posts are not trimmed of whitespace (Asagi trims whitespace from the start and end of each line)
 * Setting the group file permission (`webserverGroup`) of downloaded media is currently not supported
-* Media are only downloaded the first time they or the post they are in is seen. This means that if a thread is inserted and its media are queued to download, but the program crashes, on restart those media that didn't download will **never** be downloaded.
+* Media are only downloaded the first time they or the post they are in is seen. This guards against duplicate media, but can also lead to [data loss](#data-loss) if Ena crashes
 * API data must be complete and correct for it to be processed. Data with incorrect types, missing fields, or other errors is silently rejected during deserialization. For example, if the media of a post had no thumbnail, and the `tn_w` and `tn_h` fields were omitted, Ena would not replace them with defaults of 0. Instead, the media would be ignored, even if the full file existed
 
 ### Database
@@ -58,16 +58,17 @@ Ena strives to be an accurate scraper, but it isn't perfect.
 
 ### Scraping mechanics
 
-* Requests are not retried. If a media request fails, the media will never be downloaded. If a thread request fails, data will be lost unless the thread is fetched again in the future and the request succeeds
 * Though the bumped off/deleted detection should be better than Asagi, it still has flaws: (If absolute accuracy is required a `HEAD` request could be sent for each thread)
     * If `poll_interval` is too long or the scraped board moves too quickly, threads may not be marked correctly
     * If the last _n_ threads from the catalog are deleted, they will be marked as bumped off
 
 ### Data loss
 
+* Thread fetches are not retried. If a thread request fails, data will be lost unless the thread is fetched again in the future and the request succeeds
 * Threads and posts deleted on 4chan while Ena is stopped will not be marked as such when it restarts
 * If Ena crashes in the process of updating an archived thread, on restart the thread may be marked as "archived" even if the update never happened. Thus, changes between the last poll of the thread and the archival of it may be lost
-* As mentioned above, if Ena crashes while media are queued to download, on restart they will not be re-queued. Thus, they will never be downloaded
+* If a media fails to download because of a recoverable error (i.e. not a 404), Ena will retry the download with exponential backoff. The current delay is 2 seconds, 4 seconds, 8 seconds, and so on up to 256 seconds. After waiting the maximum delay, Ena will give up
+* If Ena crashes while media are queued to download, on restart they will not be automatically re-queued. Thus, those media will be lost unless they are re-queued from a thread
 
 ## Legal
 
