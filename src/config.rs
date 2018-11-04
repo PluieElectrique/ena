@@ -1,6 +1,6 @@
 //! Configuration file parsing.
 
-use std::fs::File;
+use std::fs::{self, File};
 use std::io::prelude::*;
 use std::io::BufReader;
 use std::path::PathBuf;
@@ -55,6 +55,7 @@ pub struct RateLimitingSettings {
 pub struct DatabaseMediaConfig {
     pub database_url: String,
     pub charset: String,
+    #[serde(deserialize_with = "validate_media_path")]
     pub media_path: PathBuf,
 }
 
@@ -94,9 +95,19 @@ pub fn parse_config() -> Result<Config, Error> {
     if config.scraping.boards.is_empty() {
         return Err(ConfigError::NoBoards.into());
     } else if config.database_media.charset.is_empty() {
-        return Err(ConfigError::EmptyCharset.into())
+        return Err(ConfigError::EmptyCharset.into());
     } else if config.database_media.database_url.is_empty() {
-        return Err(ConfigError::EmptyDatabaseUrl.into())
+        return Err(ConfigError::EmptyDatabaseUrl.into());
+    }
+
+    fs::create_dir_all(&config.database_media.media_path)
+        .context("Could not create media directory")?;
+    {
+        let mut test_file = config.database_media.media_path.clone();
+        test_file.push("ena_permission_test");
+        File::create(&test_file).context("Could not create test file in media directory")?;
+        fs::remove_file(&test_file)
+            .context("Could not remove media directory permission test file")?;
     }
 
     config.scraping.boards.sort();
@@ -118,7 +129,7 @@ where
 
     if secs == 0 {
         use serde::de::Error;
-        Err(D::Error::custom("Interval must be at least 1 second"))
+        Err(D::Error::custom("interval must be at least 1 second"))
     } else {
         Ok(Duration::from_secs(secs))
     }
@@ -149,5 +160,21 @@ where
         Err(D::Error::custom("`max_concurrent` must be at least 1"))
     } else {
         Ok(max_concurrent)
+    }
+}
+
+fn validate_media_path<'de, D>(deserializer: D) -> Result<PathBuf, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let media_path: String = Deserialize::deserialize(deserializer)?;
+
+    if media_path.is_empty() {
+        use serde::de::Error;
+        Err(D::Error::custom(
+            "media path must not be empty (use \".\" for current directory)",
+        ))
+    } else {
+        Ok(PathBuf::from(media_path))
     }
 }

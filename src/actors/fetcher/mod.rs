@@ -1,4 +1,3 @@
-use std;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -112,15 +111,6 @@ impl Fetcher {
         thread_updater: Addr<ThreadUpdater>,
         fetcher: Addr<Self>,
     ) -> Result<Self, Error> {
-        std::fs::create_dir_all(media_path).context("Could not create media directory")?;
-        {
-            let mut test_file = media_path.to_owned();
-            test_file.push("ena_permission_test");
-            std::fs::File::create(&test_file).context("Could not access media directory")?;
-            std::fs::remove_file(&test_file)
-                .context("Could not remove media directory permission test file")?;
-        }
-
         let mut runtime = Runtime::new().unwrap();
         let https = HttpsConnector::new(2).context("Could not create HttpsConnector")?;
         let client = Arc::new(Client::builder().build::<_, Body>(https));
