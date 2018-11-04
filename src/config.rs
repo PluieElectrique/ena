@@ -44,7 +44,9 @@ pub struct RateLimitingConfig {
 pub struct RateLimitingSettings {
     #[serde(deserialize_with = "duration_from_secs")]
     pub interval: Duration,
+    #[serde(deserialize_with = "validate_max_interval")]
     pub max_interval: usize,
+    #[serde(deserialize_with = "validate_max_concurrent")]
     pub max_concurrent: usize,
 }
 
@@ -106,8 +108,36 @@ where
 
     if secs == 0 {
         use serde::de::Error;
-        Err(D::Error::custom("Duration must be at least 1 second"))
+        Err(D::Error::custom("Interval must be at least 1 second"))
     } else {
         Ok(Duration::from_secs(secs))
+    }
+}
+
+fn validate_max_interval<'de, D>(deserializer: D) -> Result<usize, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let max_interval: usize = Deserialize::deserialize(deserializer)?;
+
+    if max_interval == 0 {
+        use serde::de::Error;
+        Err(D::Error::custom("`max_interval` must be at least 1"))
+    } else {
+        Ok(max_interval)
+    }
+}
+
+fn validate_max_concurrent<'de, D>(deserializer: D) -> Result<usize, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let max_concurrent: usize = Deserialize::deserialize(deserializer)?;
+
+    if max_concurrent == 0 {
+        use serde::de::Error;
+        Err(D::Error::custom("`max_concurrent` must be at least 1"))
+    } else {
+        Ok(max_concurrent)
     }
 }
