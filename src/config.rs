@@ -70,9 +70,6 @@ pub struct AsagiCompatibilityConfig {
 pub enum ConfigError {
     #[fail(display = "`boards` must contain at least one board to scrape")]
     NoBoards,
-
-    #[fail(display = "`poll_interval` must be at least 1 second (preferably 10 seconds or more)")]
-    ZeroPollInterval,
 }
 
 /// Read the configuration file `ena.toml` and parse it.
@@ -93,10 +90,7 @@ pub fn parse_config() -> Result<Config, Error> {
     config.scraping.boards.sort();
     config.scraping.boards.dedup();
 
-    let poll_interval = config.scraping.poll_interval.as_secs();
-    if poll_interval == 0 {
-        return Err(ConfigError::ZeroPollInterval.into());
-    } else if poll_interval < 10 {
+    if config.scraping.poll_interval.as_secs() < 10 {
         warn!("4chan API rules recommend a minimum `poll_interval` of 10 seconds");
         warn!("A very short `poll_interval` may cause the API to return old data");
     }
@@ -109,5 +103,11 @@ where
     D: Deserializer<'de>,
 {
     let secs: u64 = Deserialize::deserialize(deserializer)?;
-    Ok(Duration::from_secs(secs))
+
+    if secs == 0 {
+        use serde::de::Error;
+        Err(D::Error::custom("Duration must be at least 1 second"))
+    } else {
+        Ok(Duration::from_secs(secs))
+    }
 }
