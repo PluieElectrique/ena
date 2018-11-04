@@ -6,7 +6,8 @@ use std::io::BufReader;
 use std::path::PathBuf;
 use std::time::Duration;
 
-use failure::{Error, ResultExt};
+use failure::ResultExt;
+use serde::de::Error;
 use serde::{Deserialize, Deserializer};
 
 use four_chan::Board;
@@ -82,7 +83,7 @@ pub enum ConfigError {
 }
 
 /// Read the configuration file `ena.toml` and parse it.
-pub fn parse_config() -> Result<Config, Error> {
+pub fn parse_config() -> Result<Config, failure::Error> {
     let file = File::open("ena.toml").context("Could not open ena.toml")?;
     let mut buf_reader = BufReader::new(file);
     let mut contents = String::new();
@@ -128,7 +129,6 @@ where
     let secs: u64 = Deserialize::deserialize(deserializer)?;
 
     if secs == 0 {
-        use serde::de::Error;
         Err(D::Error::custom("interval must be at least 1 second"))
     } else {
         Ok(Duration::from_secs(secs))
@@ -142,7 +142,6 @@ where
     let max_interval: usize = Deserialize::deserialize(deserializer)?;
 
     if max_interval == 0 {
-        use serde::de::Error;
         Err(D::Error::custom("`max_interval` must be at least 1"))
     } else {
         Ok(max_interval)
@@ -156,7 +155,6 @@ where
     let max_concurrent: usize = Deserialize::deserialize(deserializer)?;
 
     if max_concurrent == 0 {
-        use serde::de::Error;
         Err(D::Error::custom("`max_concurrent` must be at least 1"))
     } else {
         Ok(max_concurrent)
@@ -170,7 +168,6 @@ where
     let media_path: String = Deserialize::deserialize(deserializer)?;
 
     if media_path.is_empty() {
-        use serde::de::Error;
         Err(D::Error::custom(
             "media path must not be empty (use \".\" for current directory)",
         ))
