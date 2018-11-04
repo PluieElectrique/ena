@@ -22,7 +22,7 @@ use tokio;
 use tokio::runtime::Runtime;
 
 use actors::ThreadUpdater;
-use config::RateLimitingConfig;
+use config::RateLimitingSettings;
 use four_chan::*;
 
 mod delay_queue;
@@ -84,9 +84,9 @@ impl Actor for Fetcher {
 impl Fetcher {
     pub fn create(
         media_path: &Path,
-        media_rl_config: &RateLimitingConfig,
-        thread_rl_config: &RateLimitingConfig,
-        thread_list_rl_config: &RateLimitingConfig,
+        media_rl_settings: &RateLimitingSettings,
+        thread_rl_settings: &RateLimitingSettings,
+        thread_list_rl_settings: &RateLimitingSettings,
         thread_updater: Addr<ThreadUpdater>,
     ) -> Result<Addr<Self>, Error> {
         let ctx = {
@@ -95,9 +95,9 @@ impl Fetcher {
         };
         let fetcher = Fetcher::new(
             media_path,
-            media_rl_config,
-            thread_rl_config,
-            thread_list_rl_config,
+            media_rl_settings,
+            thread_rl_settings,
+            thread_list_rl_settings,
             thread_updater,
             ctx.address(),
         )?;
@@ -106,9 +106,9 @@ impl Fetcher {
 
     fn new(
         media_path: &Path,
-        media_rl_config: &RateLimitingConfig,
-        thread_rl_config: &RateLimitingConfig,
-        thread_list_rl_config: &RateLimitingConfig,
+        media_rl_settings: &RateLimitingSettings,
+        thread_rl_settings: &RateLimitingSettings,
+        thread_list_rl_settings: &RateLimitingSettings,
         thread_updater: Addr<ThreadUpdater>,
         fetcher: Addr<Self>,
     ) -> Result<Self, Error> {
@@ -144,7 +144,7 @@ impl Fetcher {
                 .map(move |request| {
                     fetch_media(request, &client, media_path.clone(), retry_sender.clone())
                 });
-            runtime.spawn(Consume::new(RateLimiter::new(stream, media_rl_config)));
+            runtime.spawn(Consume::new(RateLimiter::new(stream, media_rl_settings)));
             sender
         };
 
@@ -169,14 +169,14 @@ impl Fetcher {
                         thread_updater.clone(),
                     )
                 });
-            Arbiter::spawn(Consume::new(RateLimiter::new(stream, thread_rl_config)));
+            Arbiter::spawn(Consume::new(RateLimiter::new(stream, thread_rl_settings)));
             sender
         };
 
         let (thread_list_rl_sender, receiver) = mpsc::channel(THREAD_LIST_CHANNEL_CAPACITY);
         Arbiter::spawn(Consume::new(RateLimiter::new(
             receiver,
-            thread_list_rl_config,
+            thread_list_rl_settings,
         )));
 
         Ok(Self {

@@ -5,7 +5,7 @@ use futures::prelude::*;
 use futures::stream::{Fuse, FuturesUnordered};
 use tokio::timer::Delay;
 
-use config::RateLimitingConfig;
+use config::RateLimitingSettings;
 
 /// An adapter for a stream of futures which limits the number of concurrently running futures and
 /// the number of futures that run in a given time interval. Results are returned in the order that
@@ -36,15 +36,15 @@ where
     S: Stream,
     S::Item: IntoFuture<Error = <S as Stream>::Error>,
 {
-    pub fn new(s: S, config: &RateLimitingConfig) -> Self {
+    pub fn new(s: S, settings: &RateLimitingSettings) -> Self {
         Self {
             stream: s.fuse(),
             queue: FuturesUnordered::new(),
             delay: None,
-            interval: Duration::from_secs(config.interval),
+            interval: Duration::from_secs(settings.interval),
             curr_interval: 0,
-            max_interval: config.max_interval,
-            max_concurrent: config.max_concurrent,
+            max_interval: settings.max_interval,
+            max_concurrent: settings.max_concurrent,
         }
     }
 }

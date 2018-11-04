@@ -44,13 +44,13 @@ fn main() {
     let sys = System::new("ena");
 
     let database = Database::new(
-        my::Pool::new(config.database_url),
-        &config.boards,
-        &config.charset,
-        config.adjust_timestamps,
-        config.create_index_counters,
-        config.download_media,
-        config.download_thumbs,
+        my::Pool::new(config.database_media.database_url),
+        &config.scraping.boards,
+        &config.database_media.charset,
+        config.asagi_compat.adjust_timestamps,
+        config.asagi_compat.create_index_counters,
+        config.scraping.download_media,
+        config.scraping.download_thumbs,
     ).unwrap_or_else(|err| {
         error!("Database initialization error: {}", err);
         process::exit(1);
@@ -65,10 +65,10 @@ fn main() {
     };
 
     let fetcher = Fetcher::create(
-        &config.media_path,
-        &config.media_rate_limiting,
-        &config.thread_rate_limiting,
-        &config.thread_list_rate_limiting,
+        &config.database_media.media_path,
+        &config.rate_limiting.media,
+        &config.rate_limiting.thread,
+        &config.rate_limiting.thread_list,
         thread_updater_ctx.address(),
     ).unwrap_or_else(|err| {
         log_error!(err.as_fail());
@@ -78,14 +78,14 @@ fn main() {
     let thread_updater = thread_updater_ctx.run(ThreadUpdater::new(
         database,
         fetcher.clone(),
-        config.refetch_archived_threads,
-        config.always_add_archive_times,
+        config.asagi_compat.refetch_archived_threads,
+        config.asagi_compat.always_add_archive_times,
     ));
 
     BoardPoller::new(
-        &config.boards,
-        Duration::from_secs(config.poll_interval),
-        config.fetch_archive,
+        &config.scraping.boards,
+        Duration::from_secs(config.scraping.poll_interval),
+        config.scraping.fetch_archive,
         thread_updater,
         fetcher,
     ).start();
