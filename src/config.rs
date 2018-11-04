@@ -68,6 +68,9 @@ pub struct AsagiCompatibilityConfig {
 /// Configuration parsing errors.
 #[derive(Debug, Fail)]
 pub enum ConfigError {
+    #[fail(display = "`boards` must contain at least one board to scrape")]
+    NoBoards,
+
     #[fail(display = "`poll_interval` must be at least 1 second (preferably 10 seconds or more)")]
     ZeroPollInterval,
 }
@@ -82,6 +85,10 @@ pub fn parse_config() -> Result<Config, Error> {
         .context("Could not read ena.toml")?;
 
     let mut config: Config = toml::from_str(&contents).context("Could not parse ena.toml")?;
+
+    if config.scraping.boards.is_empty() {
+        return Err(ConfigError::NoBoards.into());
+    }
 
     config.scraping.boards.sort();
     config.scraping.boards.dedup();
