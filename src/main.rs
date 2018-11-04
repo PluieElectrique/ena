@@ -12,7 +12,8 @@ use std::time::Duration;
 
 use actix::prelude::*;
 use ena::actors::*;
-use ena::*;
+use ena::config::parse_config;
+use ena::log_error;
 
 const THREAD_UPDATER_MAILBOX_CAPACITY: usize = 500;
 

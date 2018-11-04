@@ -21,20 +21,22 @@ use serde_json;
 use tokio;
 use tokio::runtime::Runtime;
 
+use actors::ThreadUpdater;
+use config::RateLimitingConfig;
+use four_chan::*;
+
 mod delay_queue;
 mod error;
 mod helper;
 mod messages;
 mod rate_limiter;
 
-use self::delay_queue::DelayQueue;
 pub use self::error::FetchError;
-use self::helper::*;
 pub use self::messages::*;
+
+use self::delay_queue::DelayQueue;
+use self::helper::*;
 use self::rate_limiter::{Consume, RateLimiter};
-use actors::ThreadUpdater;
-use four_chan::*;
-use RateLimitingConfig;
 
 type HttpsClient = Client<HttpsConnector<HttpConnector>>;
 

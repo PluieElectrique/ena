@@ -5,7 +5,7 @@ use futures::prelude::*;
 use futures::stream::{Fuse, FuturesUnordered};
 use tokio::timer::Delay;
 
-use RateLimitingConfig;
+use config::RateLimitingConfig;
 
 /// An adapter for a stream of futures which limits the number of concurrently running futures and
 /// the number of futures that run in a given time interval. Results are returned in the order that
