@@ -4,8 +4,10 @@ use std::fs::File;
 use std::io::prelude::*;
 use std::io::BufReader;
 use std::path::PathBuf;
+use std::time::Duration;
 
 use failure::{Error, ResultExt};
+use serde::{Deserialize, Deserializer};
 
 use four_chan::Board;
 
@@ -22,7 +24,8 @@ pub struct Config {
 #[derive(Deserialize)]
 pub struct ScrapingConfig {
     pub boards: Vec<Board>,
-    pub poll_interval: u64,
+    #[serde(deserialize_with = "duration_from_secs")]
+    pub poll_interval: Duration,
     pub fetch_archive: bool,
     pub download_media: bool,
     pub download_thumbs: bool,
@@ -39,7 +42,8 @@ pub struct RateLimitingConfig {
 /// A struct for individual rate limiting settings.
 #[derive(Deserialize)]
 pub struct RateLimitingSettings {
-    pub interval: u64,
+    #[serde(deserialize_with = "duration_from_secs")]
+    pub interval: Duration,
     pub max_interval: usize,
     pub max_concurrent: usize,
 }
@@ -82,12 +86,21 @@ pub fn parse_config() -> Result<Config, Error> {
     config.scraping.boards.sort();
     config.scraping.boards.dedup();
 
-    if config.scraping.poll_interval == 0 {
+    let poll_interval = config.scraping.poll_interval.as_secs();
+    if poll_interval == 0 {
         return Err(ConfigError::ZeroPollInterval.into());
-    } else if config.scraping.poll_interval < 10 {
+    } else if poll_interval < 10 {
         warn!("4chan API rules recommend a minimum `poll_interval` of 10 seconds");
         warn!("A very short `poll_interval` may cause the API to return old data");
     }
 
     Ok(config)
+}
+
+fn duration_from_secs<'de, D>(deserializer: D) -> Result<Duration, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let secs: u64 = Deserialize::deserialize(deserializer)?;
+    Ok(Duration::from_secs(secs))
 }

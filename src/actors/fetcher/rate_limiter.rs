@@ -41,7 +41,7 @@ where
             stream: s.fuse(),
             queue: FuturesUnordered::new(),
             delay: None,
-            interval: Duration::from_secs(settings.interval),
+            interval: settings.interval,
             curr_interval: 0,
             max_interval: settings.max_interval,
             max_concurrent: settings.max_concurrent,

@@ -8,7 +8,6 @@ extern crate mysql_async as my;
 
 use std::io::Write;
 use std::process;
-use std::time::Duration;
 
 use actix::prelude::*;
 use ena::actors::*;
@@ -84,7 +83,7 @@ fn main() {
 
     BoardPoller::new(
         &config.scraping.boards,
-        Duration::from_secs(config.scraping.poll_interval),
+        config.scraping.poll_interval,
         config.scraping.fetch_archive,
         thread_updater,
         fetcher,
