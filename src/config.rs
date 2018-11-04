@@ -70,7 +70,13 @@ pub struct AsagiCompatibilityConfig {
 /// Configuration parsing errors.
 #[derive(Debug, Fail)]
 pub enum ConfigError {
-    #[fail(display = "`boards` must contain at least one board to scrape")]
+    #[fail(display = "`database_media.charset` must not be empty")]
+    EmptyCharset,
+
+    #[fail(display = "`database_media.database_url` must not be empty")]
+    EmptyDatabaseUrl,
+
+    #[fail(display = "`scraping.boards` must contain at least one board to scrape")]
     NoBoards,
 }
 
@@ -87,6 +93,10 @@ pub fn parse_config() -> Result<Config, Error> {
 
     if config.scraping.boards.is_empty() {
         return Err(ConfigError::NoBoards.into());
+    } else if config.database_media.charset.is_empty() {
+        return Err(ConfigError::EmptyCharset.into())
+    } else if config.database_media.database_url.is_empty() {
+        return Err(ConfigError::EmptyDatabaseUrl.into())
     }
 
     config.scraping.boards.sort();
