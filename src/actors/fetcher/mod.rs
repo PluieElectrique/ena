@@ -55,8 +55,9 @@ const REQUEST_RETRY_FACTOR: u64 = 2;
 /// Request retry maximum delay.
 const REQUEST_RETRY_MAX_DELAY: u64 = 256;
 
-/// An actor which fetches threads, thread lists, archives, and media from the 4chan API. Fetching
-/// the catalog or pages of a board or boards.json is not used and thus unsupported.
+/// An actor which fetches threads, thread lists, archives, and media from the 4chan API.
+///
+/// Fetching the catalog or pages of a board or `boards.json` is not used and thus unsupported.
 pub struct Fetcher {
     client: Arc<HttpsClient>,
     last_modified: HashMap<LastModifiedKey, DateTime<Utc>>,

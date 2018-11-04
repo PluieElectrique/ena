@@ -1,3 +1,5 @@
+//! 4chan API definitions.
+
 use std::fmt;
 
 use serde::{Deserialize, Deserializer};
@@ -7,11 +9,13 @@ mod tests;
 pub const API_URI_PREFIX: &str = "https://a.4cdn.org";
 pub const IMG_URI_PREFIX: &str = "https://i.4cdn.org";
 
+/// A wrapper struct used to deserialize the page objects of `threads.json`.
 #[derive(Deserialize)]
 pub struct ThreadPage {
     pub threads: Vec<Thread>,
 }
 
+/// A single thread from `threads.json`.
 #[derive(Deserialize)]
 pub struct Thread {
     pub no: u64,
@@ -20,12 +24,15 @@ pub struct Thread {
     pub bump_index: usize,
 }
 
+/// A wrapper struct used to deserialize the outer JSON object of a thread.
 #[derive(Deserialize)]
 pub struct PostsWrapper {
     pub posts: Vec<Post>,
 }
 
-// Some fields aren't used, and thus are omitted.
+/// A struct representing a post.
+///
+/// Unused fields are omitted.
 #[derive(Deserialize)]
 pub struct Post {
     // Required fields
@@ -54,6 +61,7 @@ pub struct Post {
     pub image: Option<PostImage>,
 }
 
+/// A struct representing the OP data of a post.
 #[derive(Clone, Deserialize, PartialEq)]
 pub struct OpData {
     #[serde(deserialize_with = "num_to_bool")]
@@ -68,6 +76,7 @@ pub struct OpData {
     pub archived_on: Option<u64>,
 }
 
+/// A struct representing the image data of a post.
 #[derive(Deserialize)]
 pub struct PostImage {
     pub filename: String,
@@ -124,6 +133,7 @@ impl Board {
     }
 }
 
+/// An enum of every 4chan board.
 #[allow(non_camel_case_types)]
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum Board {

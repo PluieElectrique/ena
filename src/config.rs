@@ -1,3 +1,5 @@
+//! Configuration file parsing.
+
 use std::fs::File;
 use std::io::prelude::*;
 use std::io::BufReader;
@@ -7,6 +9,7 @@ use failure::{Error, ResultExt};
 
 use four_chan::Board;
 
+/// The configuration file struct.
 #[derive(Deserialize)]
 pub struct Config {
     pub boards: Vec<Board>,
@@ -26,6 +29,7 @@ pub struct Config {
     pub create_index_counters: bool,
 }
 
+/// A struct for rate limiting configuration.
 #[derive(Deserialize)]
 pub struct RateLimitingConfig {
     pub interval: u64,
@@ -33,12 +37,14 @@ pub struct RateLimitingConfig {
     pub max_concurrent: usize,
 }
 
+/// Configuration parsing errors.
 #[derive(Debug, Fail)]
 pub enum ConfigError {
     #[fail(display = "`poll_interval` must be at least 1 second (preferably 10 seconds or more)")]
     ZeroPollInterval,
 }
 
+/// Read the configuration file `ena.toml` and parse it.
 pub fn parse_config() -> Result<Config, Error> {
     let file = File::open("ena.toml").context("Could not open ena.toml")?;
     let mut buf_reader = BufReader::new(file);

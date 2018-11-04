@@ -48,6 +48,7 @@ macro_rules! zero_format {
     }};
 }
 
+/// A helper macro for logging an error and its causes.
 #[macro_export]
 macro_rules! log_error {
     ($fail:expr) => {{

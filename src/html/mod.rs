@@ -1,3 +1,5 @@
+//! 4chan HTML unescaping and cleaning (partial HTML to BBCode conversion).
+
 #![cfg_attr(feature = "cargo-clippy", allow(trivial_regex))]
 
 use std::borrow::Cow;

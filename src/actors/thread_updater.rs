@@ -14,7 +14,7 @@ use super::database::*;
 use super::fetcher::*;
 use four_chan::{self, Board, OpData, Post};
 
-/// An actor which updates a board's thread when it receives change notifications from its
+/// An actor which updates threads when it receives change notifications from
 /// [`BoardPoller`](struct.BoardPoller.html).
 pub struct ThreadUpdater {
     thread_meta: HashMap<(Board, u64), ThreadMetadata>,
