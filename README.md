@@ -36,11 +36,11 @@ By default, only errors are logged. Logging is configured by setting the `RUST_L
 
 ### Post/media processing
 
-* `[sjis]`, `[qstcolor]`, `[i]`, and `[u]` tags are supported. /qst/ bold and italic text is also supported
+* `[sjis]`, `[qstcolor]`, `[i]`, and `[u]` tags are supported. `/qst/` bold and italic text is also supported
 * The `XX` and `A1` country flags are not ignored
 * A fixed set of HTML character references ("entities") are replaced in usernames and titles (In addition to the references Ena replaces, Asagi also replaces all numeric character references of the form `&#\d+;`)
 * Posts are not trimmed of whitespace (Asagi trims whitespace from the start and end of each line)
-* Setting the group file permission (`webserverGroup`) of downloaded media is currently not supported
+* Setting the group file permission (`webserverGroup`) of downloaded media is not supported
 * Media are only downloaded the first time they or the post they are in is seen. This guards against duplicate media, but can also lead to [data loss](#data-loss) if Ena crashes
 * API data must be complete and correct for it to be processed. Data with incorrect types, missing fields, or other errors is silently rejected during deserialization. For example, if the media of a post had no thumbnail, and the `tn_w` and `tn_h` fields were omitted, Ena would not replace them with defaults of 0. Instead, the media would be ignored, even if the full file existed
 
