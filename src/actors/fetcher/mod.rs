@@ -353,7 +353,8 @@ fn fetch_media(
         }).then(move |res| {
             use self::FetchError::*;
             let should_retry = |err: &FetchError| match *err {
-                EmptyData | NotFound(_) | NotModified => false,
+                NotFound(_) => false,
+                EmptyData | JsonError(_) | NotModified => unreachable!(),
                 _ => true,
             };
 
