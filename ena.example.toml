@@ -14,7 +14,7 @@ download_media = true
 download_thumbs = true
 
 
-[rate_limiting]
+[network.rate_limiting]
 # `interval` is in seconds.
 # `max_interval` is the maximum number of requests that can be made in an interval.
 # `max_concurrent` is the maximum number of requests that can run at once.
@@ -25,6 +25,21 @@ media = { interval = 60, max_interval = 600, max_concurrent = 150 }
 thread = { interval = 60, max_interval = 200, max_concurrent = 75 }
 # threads.json and archive.json
 thread_list = { interval = 60, max_interval = 180, max_concurrent = 50 }
+
+
+# Exponential backoff for retrying failed requests
+[network.retry_backoff]
+# The first delay is `base` seconds. The next delay is `base * factor` seconds, then
+# `base * factor ^ 2` seconds, and so on. Once the delay is more than `max`, the request will no
+# longer be retried.
+# Note: these are minimum delays. Rate limiting may cause the actual delays to be longer.
+
+# The base delay must be at least 1 second
+base = 2
+# The delay factor must be at least 2
+factor = 2
+# To disable retrying, set max to 0
+max = 256
 
 
 [database_media]

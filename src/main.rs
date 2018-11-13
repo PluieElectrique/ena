@@ -65,9 +65,9 @@ fn main() {
 
     let fetcher = Fetcher::create(
         &config.database_media.media_path,
-        &config.rate_limiting.media,
-        &config.rate_limiting.thread,
-        &config.rate_limiting.thread_list,
+        &config.network.rate_limiting.media,
+        &config.network.rate_limiting.thread,
+        &config.network.rate_limiting.thread_list,
         thread_updater_ctx.address(),
     ).unwrap_or_else(|err| {
         log_error!(err.as_fail());

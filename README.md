@@ -67,7 +67,7 @@ Ena strives to be an accurate scraper, but it isn't perfect.
 * Thread fetches are not retried. If a thread request fails, data will be lost unless the thread is fetched again in the future and the request succeeds
 * Threads and posts deleted on 4chan while Ena is stopped will not be marked as such when it restarts
 * If Ena crashes in the process of updating an archived thread, on restart the thread may be marked as "archived" even if the update never happened. Thus, changes between the last poll of the thread and the archival of it may be lost
-* If a media fails to download because of a recoverable error (i.e. not a 404), Ena will retry the download with exponential backoff. The current delay is 2 seconds, 4 seconds, 8 seconds, and so on up to 256 seconds. After waiting the maximum delay, Ena will give up
+* If a media fails to download because of a recoverable error (i.e. not a 404), Ena will retry the download with exponential backoff (when enabled). After waiting the maximum delay, Ena will give up
 * If Ena crashes while media are queued to download, on restart they will not be automatically re-queued. Thus, those media will be lost unless they are re-queued from a thread
 
 ## Legal

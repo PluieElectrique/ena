@@ -16,7 +16,7 @@ use four_chan::Board;
 #[derive(Deserialize)]
 pub struct Config {
     pub scraping: ScrapingConfig,
-    pub rate_limiting: RateLimitingConfig,
+    pub network: NetworkConfig,
     pub database_media: DatabaseMediaConfig,
     pub asagi_compat: AsagiCompatibilityConfig,
 }
@@ -25,11 +25,18 @@ pub struct Config {
 #[derive(Deserialize)]
 pub struct ScrapingConfig {
     pub boards: Vec<Board>,
-    #[serde(deserialize_with = "duration_from_secs")]
+    #[serde(deserialize_with = "nonzero_duration_from_secs")]
     pub poll_interval: Duration,
     pub fetch_archive: bool,
     pub download_media: bool,
     pub download_thumbs: bool,
+}
+
+/// The struct for network (general API request settings) configuration.
+#[derive(Deserialize)]
+pub struct NetworkConfig {
+    pub rate_limiting: RateLimitingConfig,
+    pub retry_backoff: RetryBackoffConfig,
 }
 
 /// The struct for the rate limiting configuration section.
@@ -43,12 +50,22 @@ pub struct RateLimitingConfig {
 /// A struct for individual rate limiting settings.
 #[derive(Deserialize)]
 pub struct RateLimitingSettings {
-    #[serde(deserialize_with = "duration_from_secs")]
+    #[serde(deserialize_with = "nonzero_duration_from_secs")]
     pub interval: Duration,
     #[serde(deserialize_with = "validate_max_interval")]
     pub max_interval: usize,
     #[serde(deserialize_with = "validate_max_concurrent")]
     pub max_concurrent: usize,
+}
+
+/// The struct for configuration of the exponential backoff for request retrying.
+#[derive(Deserialize)]
+pub struct RetryBackoffConfig {
+    #[serde(deserialize_with = "nonzero_duration_from_secs")]
+    pub base: Duration,
+    pub factor: u32,
+    #[serde(deserialize_with = "duration_from_secs")]
+    pub max: Duration,
 }
 
 /// A struct for database and media directory configuration.
@@ -80,6 +97,9 @@ pub enum ConfigError {
 
     #[fail(display = "`scraping.boards` must contain at least one board to scrape")]
     NoBoards,
+
+    #[fail(display = "`network.retry_backoff.factor` must be at least 2")]
+    ZeroRetryFactor,
 }
 
 /// Read the configuration file `ena.toml` and parse it.
@@ -99,6 +119,8 @@ pub fn parse_config() -> Result<Config, failure::Error> {
         return Err(ConfigError::EmptyCharset.into());
     } else if config.database_media.database_url.is_empty() {
         return Err(ConfigError::EmptyDatabaseUrl.into());
+    } else if config.network.retry_backoff.factor < 2 {
+        return Err(ConfigError::ZeroRetryFactor.into());
     }
 
     fs::create_dir_all(&config.database_media.media_path)
@@ -123,6 +145,14 @@ pub fn parse_config() -> Result<Config, failure::Error> {
 }
 
 fn duration_from_secs<'de, D>(deserializer: D) -> Result<Duration, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let secs: u64 = Deserialize::deserialize(deserializer)?;
+    Ok(Duration::from_secs(secs))
+}
+
+fn nonzero_duration_from_secs<'de, D>(deserializer: D) -> Result<Duration, D::Error>
 where
     D: Deserializer<'de>,
 {
