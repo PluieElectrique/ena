@@ -125,6 +125,7 @@ impl Database {
                 pool.get_conn()
                     .and_then(|conn| conn.drop_query(init_sql))
                     .and_then(|conn| conn.disconnect())
+                    .map(move |_| debug!("/{}/: Created table and triggers", board))
             }))
         })?;
         runtime.shutdown_on_idle().wait().unwrap();
