@@ -161,3 +161,34 @@ where
         }
     }
 }
+
+pub trait StreamExt: Sized {
+    fn consume(self) -> Consume<Self>
+    where
+        Self: Stream<Item = (), Error = ()>;
+
+    fn rate_limit(self, settings: &RateLimitingSettings) -> RateLimiter<Self>
+    where
+        Self: Stream,
+        <Self as Stream>::Item: IntoFuture<Error = <Self as Stream>::Error>;
+}
+
+impl<T> StreamExt for T
+where
+    T: Sized,
+{
+    fn consume(self) -> Consume<Self>
+    where
+        Self: Stream<Item = (), Error = ()>,
+    {
+        Consume::new(self)
+    }
+
+    fn rate_limit(self, settings: &RateLimitingSettings) -> RateLimiter<Self>
+    where
+        Self: Stream,
+        <Self as Stream>::Item: IntoFuture<Error = <Self as Stream>::Error>,
+    {
+        RateLimiter::new(self, settings)
+    }
+}

@@ -35,7 +35,7 @@ pub use self::messages::*;
 
 use self::delay_queue::DelayQueue;
 use self::helper::*;
-use self::rate_limiter::{Consume, RateLimiter};
+use self::rate_limiter::StreamExt;
 
 type HttpsClient = Client<HttpsConnector<HttpConnector>>;
 
@@ -122,7 +122,7 @@ impl Fetcher {
 
             let (retry_sender, retry_receiver) = mpsc::channel(MEDIA_CHANNEL_CAPACITY);
 
-            let stream = receiver
+            let future = receiver
                 .map(|FetchMedia(board, filenames)| {
                     stream::iter_ok(
                         filenames
@@ -133,15 +133,16 @@ impl Fetcher {
                 .select(DelayQueue::new(retry_receiver))
                 .map(move |request| {
                     fetch_media(request, &client, media_path.clone(), retry_sender.clone())
-                });
-            runtime.spawn(Consume::new(RateLimiter::new(stream, media_rl_settings)));
+                }).rate_limit(media_rl_settings)
+                .consume();
+            runtime.spawn(future);
             sender
         };
 
         let thread_sender = {
             let (sender, receiver) = mpsc::channel(THREAD_CHANNEL_CAPACITY);
             let client = client.clone();
-            let stream = receiver
+            let future = receiver
                 .map(|(msg, last_modified): (FetchThreads, Vec<DateTime<Utc>>)| {
                     let FetchThreads(board, nums, from_archive_json) = msg;
                     stream::iter_ok(nums.into_iter().zip(last_modified.into_iter())).map(
@@ -158,16 +159,17 @@ impl Fetcher {
                         fetcher.clone(),
                         thread_updater.clone(),
                     )
-                });
-            Arbiter::spawn(Consume::new(RateLimiter::new(stream, thread_rl_settings)));
+                }).rate_limit(thread_rl_settings)
+                .consume();
+            Arbiter::spawn(future);
             sender
         };
 
-        let (thread_list_sender, receiver) = mpsc::channel(THREAD_LIST_CHANNEL_CAPACITY);
-        Arbiter::spawn(Consume::new(RateLimiter::new(
-            receiver,
-            thread_list_rl_settings,
-        )));
+        let thread_list_sender = {
+            let (sender, receiver) = mpsc::channel(THREAD_LIST_CHANNEL_CAPACITY);
+            Arbiter::spawn(receiver.rate_limit(thread_list_rl_settings).consume());
+            sender
+        };
 
         Ok(Self {
             client,
