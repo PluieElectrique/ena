@@ -19,16 +19,16 @@ const THREAD_UPDATER_MAILBOX_CAPACITY: usize = 500;
 fn main() {
     env_logger::Builder::from_default_env()
         .format(|fmt, record| {
+            let timestamp = fmt.timestamp();
             let level = record.level();
             let level_style = fmt.default_level_style(level);
-            let timestamp = fmt.timestamp();
             let args = record.args();
 
             writeln!(
                 fmt,
-                "{:>5} {} >    {}",
-                level_style.value(level),
+                "{} {:<5} >    {}",
                 timestamp,
+                level_style.value(level),
                 args
             )
         }).init();
