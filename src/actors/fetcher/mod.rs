@@ -60,9 +60,9 @@ const REQUEST_RETRY_MAX_DELAY: u64 = 256;
 pub struct Fetcher {
     client: Arc<HttpsClient>,
     last_modified: HashMap<LastModifiedKey, DateTime<Utc>>,
-    media_rl_sender: Sender<FetchMedia>,
-    thread_rl_sender: Sender<(FetchThreads, Vec<DateTime<Utc>>)>,
-    thread_list_rl_sender: Sender<Box<Future<Item = (), Error = ()>>>,
+    media_sender: Sender<FetchMedia>,
+    thread_sender: Sender<(FetchThreads, Vec<DateTime<Utc>>)>,
+    thread_list_sender: Sender<Box<Future<Item = (), Error = ()>>>,
     // Fetcher must use its own runtime for fetching media because tokio::fs functions can't use the
     // current_thread runtime that Actix provides
     runtime: Runtime,
@@ -115,7 +115,7 @@ impl Fetcher {
         let https = HttpsConnector::new(2).context("Could not create HttpsConnector")?;
         let client = Arc::new(Client::builder().build::<_, Body>(https));
 
-        let media_rl_sender = {
+        let media_sender = {
             let (sender, receiver) = mpsc::channel(MEDIA_CHANNEL_CAPACITY);
             let client = client.clone();
             let media_path = media_path.to_owned();
@@ -138,7 +138,7 @@ impl Fetcher {
             sender
         };
 
-        let thread_rl_sender = {
+        let thread_sender = {
             let (sender, receiver) = mpsc::channel(THREAD_CHANNEL_CAPACITY);
             let client = client.clone();
             let stream = receiver
@@ -163,7 +163,7 @@ impl Fetcher {
             sender
         };
 
-        let (thread_list_rl_sender, receiver) = mpsc::channel(THREAD_LIST_CHANNEL_CAPACITY);
+        let (thread_list_sender, receiver) = mpsc::channel(THREAD_LIST_CHANNEL_CAPACITY);
         Arbiter::spawn(Consume::new(RateLimiter::new(
             receiver,
             thread_list_rl_settings,
@@ -172,9 +172,9 @@ impl Fetcher {
         Ok(Self {
             client,
             last_modified: HashMap::new(),
-            media_rl_sender,
-            thread_rl_sender,
-            thread_list_rl_sender,
+            media_sender,
+            thread_sender,
+            thread_list_sender,
             runtime,
         })
     }

@@ -44,7 +44,7 @@ impl Handler<FetchThreads> for Fetcher {
             .collect();
 
         Arbiter::spawn(
-            self.thread_rl_sender
+            self.thread_sender
                 .clone()
                 .send((msg, last_modified))
                 .map(|_| ())
@@ -96,7 +96,7 @@ impl Handler<FetchThreadList> for Fetcher {
                 }),
         );
         RateLimitedResponse {
-            sender: self.thread_list_rl_sender.clone(),
+            sender: self.thread_list_sender.clone(),
             future,
         }
     }
@@ -138,7 +138,7 @@ impl Handler<FetchArchive> for Fetcher {
                 }),
         );
         RateLimitedResponse {
-            sender: self.thread_list_rl_sender.clone(),
+            sender: self.thread_list_sender.clone(),
             future,
         }
     }
@@ -153,12 +153,12 @@ impl Handler<FetchMedia> for Fetcher {
         // If a media future panics, the media runtime will crash and the sender will close. The
         // Actix system has its own runtime, so it won't crash. But, we can't recover from a media
         // runtime panic, so if the media runtime crashes we crash the Actix system as well.
-        if self.media_rl_sender.is_closed() {
+        if self.media_sender.is_closed() {
             panic!("Media sender is closed");
         }
 
         self.runtime.spawn(
-            self.media_rl_sender
+            self.media_sender
                 .clone()
                 .send(msg)
                 .map(|_| ())
