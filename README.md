@@ -12,6 +12,8 @@ Copy the default configuration file `ena.example.toml` to `ena.toml` and adjust 
 cargo run --release
 ```
 
+Note: The 4chan API guidelines state that you should "make API requests using the same protocol as the app." Since Ena uses HTTPS, any app using Ena in its backend should also use HTTPS.
+
 ## Logging
 
 By default, only errors are logged. Logging is configured by setting the `RUST_LOG` environment variable. For example, to turn on all logging, use `RUST_LOG=ena`. Or, to just show warnings and errors, use `RUST_LOG=ena=warn`. See the `env_logger` [documentation](https://docs.rs/env_logger/*/env_logger/) for more information.
@@ -41,7 +43,7 @@ By default, only errors are logged. Logging is configured by setting the `RUST_L
 * A fixed set of HTML character references ("entities") are replaced in usernames and titles (In addition to the references Ena replaces, Asagi also replaces all numeric character references of the form `&#\d+;`)
 * Posts are not trimmed of whitespace (Asagi trims whitespace from the start and end of each line)
 * Setting the group file permission (`webserverGroup`) of downloaded media is not supported
-* Media are only downloaded the first time they or the post they are in is seen. This guards against duplicate media, but can also lead to [data loss](#data-loss) if Ena crashes
+* Media requests that fail from recoverable errors (e.g. not a 404) are retried with exponential backoff
 * API data must be complete and correct for it to be processed. Data with incorrect types, missing fields, or other errors is silently rejected during deserialization. For example, if the media of a post had no thumbnail, and the `tn_w` and `tn_h` fields were omitted, Ena would not replace them with defaults of 0. Instead, the media would be ignored, even if the full file existed
 
 ### Database
@@ -64,11 +66,9 @@ Ena strives to be an accurate scraper, but it isn't perfect.
 
 ### Data loss
 
-* Thread fetches are not retried. If a thread request fails, data will be lost unless the thread is fetched again in the future and the request succeeds
 * Threads and posts deleted on 4chan while Ena is stopped will not be marked as such when it restarts
 * If Ena crashes in the process of updating an archived thread, on restart the thread may be marked as "archived" even if the update never happened. Thus, changes between the last poll of the thread and the archival of it may be lost
-* If a media or thread request fails because of a recoverable error (i.e. not a 404), Ena will retry the request with exponential backoff (when enabled). After waiting the maximum delay, Ena will give up
-* If Ena crashes while media are queued to download, on restart they will not be automatically re-queued. Thus, those media will be lost unless they are re-queued from a thread
+* Media are only downloaded the first time they or the post they are in is seen. This guards against duplicate media. But, if Ena crashes while media are queued to download, on restart they will not be automatically requeued. Thus, those media will be lost unless they are requeued from a thread
 
 ## Legal
 
