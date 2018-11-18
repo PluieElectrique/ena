@@ -59,7 +59,7 @@ pub struct RateLimitingSettings {
 }
 
 /// The struct for configuration of the exponential backoff for request retrying.
-#[derive(Deserialize)]
+#[derive(Clone, Copy, Deserialize)]
 pub struct RetryBackoffConfig {
     #[serde(deserialize_with = "nonzero_duration_from_secs")]
     pub base: Duration,

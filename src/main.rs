@@ -68,6 +68,7 @@ fn main() {
         &config.network.rate_limiting.media,
         &config.network.rate_limiting.thread,
         &config.network.rate_limiting.thread_list,
+        &config.network.retry_backoff,
         thread_updater_ctx.address(),
     ).unwrap_or_else(|err| {
         log_error!(err.as_fail());

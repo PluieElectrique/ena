@@ -19,6 +19,9 @@ pub enum FetchError {
     #[fail(display = "Resource not modified")]
     NotModified,
 
+    #[fail(display = "Media already exists")]
+    ExistingMedia,
+
     #[fail(display = "Resource not found: {}", _0)]
     NotFound(String),
 
