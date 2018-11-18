@@ -125,13 +125,10 @@ pub fn parse_config() -> Result<Config, failure::Error> {
 
     fs::create_dir_all(&config.database_media.media_path)
         .context("Could not create media directory")?;
-    {
-        let mut test_file = config.database_media.media_path.clone();
-        test_file.push("ena_permission_test");
-        File::create(&test_file).context("Could not create test file in media directory")?;
-        fs::remove_file(&test_file)
-            .context("Could not remove media directory permission test file")?;
-    }
+    let mut test_file = config.database_media.media_path.clone();
+    test_file.push("ena_permission_test");
+    File::create(&test_file).context("Could not create test file in media directory")?;
+    fs::remove_file(&test_file).context("Could not remove media directory permission test file")?;
 
     config.scraping.boards.sort();
     config.scraping.boards.dedup();

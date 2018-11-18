@@ -118,8 +118,9 @@ impl Fetcher {
                             EmptyData | JsonError(_) | NotModified => unreachable!(),
                             _ => true,
                         };
+
+                        // TODO: Remove scope when NLL stabilizes
                         {
-                            // TODO: Remove scope when NLL stabilizes
                             let &(board, ref filename) = retry.as_data();
                             error!(
                                 "/{}/: Failed to fetch media {}, {}retrying: {}",
@@ -129,6 +130,7 @@ impl Fetcher {
                                 err
                             );
                         }
+
                         if will_retry {
                             Either::A(
                                 retry_sender

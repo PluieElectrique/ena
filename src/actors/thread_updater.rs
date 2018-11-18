@@ -116,6 +116,7 @@ impl ThreadUpdater {
         let mut new_posts = vec![];
         let mut modified_posts = vec![];
         let mut deleted_posts = vec![];
+        // TODO: Remove scope when NLL stabilizes
         {
             let mut prev_iter = prev_meta.posts.iter();
             let mut curr_iter = curr_meta.posts.iter().enumerate();

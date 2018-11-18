@@ -118,6 +118,7 @@ impl BoardPoller {
         // Sort ascending by no
         curr_threads.sort_by(|a, b| a.no.cmp(&b.no));
 
+        // TODO: Remove scope when NLL stabilizes
         {
             let mut prev_iter = self.threads[&board].iter();
             let mut curr_iter = curr_threads.iter();
