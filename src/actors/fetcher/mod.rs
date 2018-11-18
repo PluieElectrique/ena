@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -21,7 +21,7 @@ use tokio;
 use tokio::runtime::Runtime;
 
 use actors::ThreadUpdater;
-use config::{RateLimitingSettings, RetryBackoffConfig};
+use config::Config;
 use four_chan::*;
 
 mod error;
@@ -75,35 +75,19 @@ impl Actor for Fetcher {
 
 impl Fetcher {
     pub fn create(
-        media_path: &Path,
-        media_rl_settings: &RateLimitingSettings,
-        thread_rl_settings: &RateLimitingSettings,
-        thread_list_rl_settings: &RateLimitingSettings,
-        retry_backoff: &RetryBackoffConfig,
+        config: &Config,
         thread_updater: Addr<ThreadUpdater>,
     ) -> Result<Addr<Self>, Error> {
         let ctx = {
             let (_, receiver) = actix::dev::channel::channel(FETCHER_MAILBOX_CAPACITY);
             Context::with_receiver(receiver)
         };
-        let fetcher = Fetcher::new(
-            media_path,
-            media_rl_settings,
-            thread_rl_settings,
-            thread_list_rl_settings,
-            *retry_backoff,
-            thread_updater,
-            ctx.address(),
-        )?;
+        let fetcher = Fetcher::new(config, thread_updater, ctx.address())?;
         Ok(ctx.run(fetcher))
     }
 
     fn new(
-        media_path: &Path,
-        media_rl_settings: &RateLimitingSettings,
-        thread_rl_settings: &RateLimitingSettings,
-        thread_list_rl_settings: &RateLimitingSettings,
-        retry_backoff: RetryBackoffConfig,
+        config: &Config,
         thread_updater: Addr<ThreadUpdater>,
         fetcher: Addr<Self>,
     ) -> Result<Self, Error> {
@@ -114,9 +98,10 @@ impl Fetcher {
         let media_sender = {
             let (sender, receiver) = mpsc::channel(MEDIA_CHANNEL_CAPACITY);
             let client = client.clone();
-            let media_path = media_path.to_owned();
+            let media_path = config.database_media.media_path.to_owned();
 
             let (retry_sender, retry_receiver) = mpsc::channel(MEDIA_CHANNEL_CAPACITY);
+            let retry_backoff = config.network.retry_backoff;
 
             let future = receiver
                 .map(|FetchMedia(board, filenames)| {
@@ -155,7 +140,7 @@ impl Fetcher {
                             Either::B(future::ok(()))
                         }
                     })
-                }).rate_limit(media_rl_settings)
+                }).rate_limit(&config.network.rate_limiting.media)
                 .consume();
             runtime.spawn(future);
             sender
@@ -181,7 +166,7 @@ impl Fetcher {
                         fetcher.clone(),
                         thread_updater.clone(),
                     )
-                }).rate_limit(thread_rl_settings)
+                }).rate_limit(&config.network.rate_limiting.thread)
                 .consume();
             Arbiter::spawn(future);
             sender
@@ -189,7 +174,11 @@ impl Fetcher {
 
         let thread_list_sender = {
             let (sender, receiver) = mpsc::channel(THREAD_LIST_CHANNEL_CAPACITY);
-            Arbiter::spawn(receiver.rate_limit(thread_list_rl_settings).consume());
+            Arbiter::spawn(
+                receiver
+                    .rate_limit(&config.network.rate_limiting.thread_list)
+                    .consume(),
+            );
             sender
         };
 

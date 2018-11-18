@@ -11,6 +11,7 @@ use tokio::timer::Delay;
 
 use super::fetcher::*;
 use super::ThreadUpdater;
+use config::Config;
 use four_chan::{Board, Thread};
 
 #[derive(Message)]
@@ -52,23 +53,22 @@ impl Actor for BoardPoller {
 
 impl BoardPoller {
     pub fn new(
-        boards: &[Board],
-        interval: Duration,
-        fetch_archive: bool,
+        config: &Config,
         thread_updater: Addr<ThreadUpdater>,
         fetcher: Addr<Fetcher>,
     ) -> Self {
+        let boards = config.scraping.boards.clone();
         let mut threads = HashMap::new();
-        for &board in boards {
+        for &board in &boards {
             threads.insert(board, vec![]);
         }
         threads.shrink_to_fit();
 
         Self {
-            boards: boards.to_owned(),
+            boards,
             threads,
-            interval,
-            fetch_archive,
+            interval: config.scraping.poll_interval,
+            fetch_archive: config.scraping.fetch_archive,
             thread_updater: Arc::new(thread_updater),
             fetcher,
         }

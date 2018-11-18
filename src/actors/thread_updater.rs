@@ -12,6 +12,7 @@ use twox_hash::XxHash;
 use super::board_poller::*;
 use super::database::*;
 use super::fetcher::*;
+use config::Config;
 use four_chan::{self, Board, OpData, Post};
 
 /// An actor which updates threads when it receives change notifications from
@@ -29,18 +30,13 @@ impl Actor for ThreadUpdater {
 }
 
 impl ThreadUpdater {
-    pub fn new(
-        database: Addr<Database>,
-        fetcher: Addr<Fetcher>,
-        refetch_archived_threads: bool,
-        always_add_archive_times: bool,
-    ) -> Self {
+    pub fn new(config: &Config, database: Addr<Database>, fetcher: Addr<Fetcher>) -> Self {
         Self {
             thread_meta: HashMap::new(),
             fetcher: Arc::new(fetcher),
             database,
-            refetch_archived_threads,
-            always_add_archive_times,
+            refetch_archived_threads: config.asagi_compat.refetch_archived_threads,
+            always_add_archive_times: config.asagi_compat.always_add_archive_times,
         }
     }
 

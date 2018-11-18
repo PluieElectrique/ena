@@ -7,6 +7,7 @@ use my::prelude::*;
 use my::{self, Pool, Value};
 use tokio::runtime::Runtime;
 
+use config::Config;
 use four_chan::{Board, OpData, Post};
 use html;
 
@@ -94,18 +95,11 @@ pub struct Database {
 }
 
 impl Database {
-    pub fn new(
-        pool: Pool,
-        boards: &[Board],
-        charset: &str,
-        adjust_timestamps: bool,
-        create_index_counters: bool,
-        download_media: bool,
-        download_thumbs: bool,
-    ) -> Result<Self, my::errors::Error> {
+    pub fn new(config: &Config) -> Result<Self, my::errors::Error> {
+        let pool = Pool::new(&config.database_media.database_url);
         let mut runtime = Runtime::new().unwrap();
 
-        if create_index_counters {
+        if config.asagi_compat.create_index_counters {
             runtime.block_on(
                 pool.get_conn()
                     .and_then(|conn| conn.drop_query(INDEX_COUNTERS_SQL))
@@ -114,9 +108,9 @@ impl Database {
         }
 
         runtime.block_on({
-            let boards = boards.to_owned();
+            let boards = config.scraping.boards.clone();
             let pool = pool.clone();
-            let board_sql = BOARD_SQL.replace(CHARSET_REPLACE, charset);
+            let board_sql = BOARD_SQL.replace(CHARSET_REPLACE, &config.database_media.charset);
             future::join_all(boards.into_iter().map(move |board| {
                 let mut init_sql = String::new();
                 init_sql.push_str(&board_sql.replace(BOARD_REPLACE, &board.to_string()));
@@ -132,9 +126,9 @@ impl Database {
 
         Ok(Self {
             pool,
-            adjust_timestamps,
-            download_media,
-            download_thumbs,
+            adjust_timestamps: config.asagi_compat.adjust_timestamps,
+            download_media: config.scraping.download_media,
+            download_thumbs: config.scraping.download_thumbs,
         })
     }
 }
