@@ -125,65 +125,14 @@ where
     }
 }
 
-/// A stream-to-future adapter which polls a "task" stream to completion.
-#[must_use = "futures do nothing unless polled"]
-pub struct Consume<S>
-where
-    S: Stream<Item = (), Error = ()>,
-{
-    stream: S,
-}
-
-impl<S> Consume<S>
-where
-    S: Stream<Item = (), Error = ()>,
-{
-    pub fn new(s: S) -> Self {
-        Self { stream: s }
-    }
-}
-
-impl<S> Future for Consume<S>
-where
-    S: Stream<Item = (), Error = ()>,
-{
-    type Item = ();
-    type Error = ();
-
-    fn poll(&mut self) -> Poll<(), ()> {
-        loop {
-            match self.stream.poll() {
-                Ok(Async::Ready(Some(_))) => {}
-                Ok(Async::Ready(None)) => return Ok(Async::Ready(())),
-                Ok(Async::NotReady) => return Ok(Async::NotReady),
-                Err(_) => {}
-            }
-        }
-    }
-}
-
 pub trait StreamExt: Sized {
-    fn consume(self) -> Consume<Self>
-    where
-        Self: Stream<Item = (), Error = ()>;
-
     fn rate_limit(self, settings: &RateLimitingSettings) -> RateLimiter<Self>
     where
         Self: Stream,
         <Self as Stream>::Item: IntoFuture<Error = <Self as Stream>::Error>;
 }
 
-impl<T> StreamExt for T
-where
-    T: Sized,
-{
-    fn consume(self) -> Consume<Self>
-    where
-        Self: Stream<Item = (), Error = ()>,
-    {
-        Consume::new(self)
-    }
-
+impl<T: Sized> StreamExt for T {
     fn rate_limit(self, settings: &RateLimitingSettings) -> RateLimiter<Self>
     where
         Self: Stream,
