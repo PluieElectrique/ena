@@ -78,7 +78,6 @@ This program contains code from:
 
 * [Asagi](https://github.com/desuarchive/asagi) (GPLv3)
 * [futures-rs](https://github.com/rust-lang-nursery/futures-rs) (MIT)
-* [html5ever](https://github.com/servo/html5ever) (MIT)
 
 See the `NOTICE` file for more information.
 
