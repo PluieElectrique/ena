@@ -38,6 +38,16 @@ pub enum FetchError {
     MailboxError(actix::MailboxError),
 }
 
+macro_rules! impl_enum_from {
+    ($ext_type:ty, $enum:ident, $variant:ident) => {
+        impl From<$ext_type> for $enum {
+            fn from(err: $ext_type) -> Self {
+                $enum::$variant(err)
+            }
+        }
+    };
+}
+
 impl_enum_from!(hyper::Error, FetchError, HyperError);
 impl_enum_from!(hyper::StatusCode, FetchError, BadStatus);
 impl_enum_from!(serde_json::Error, FetchError, JsonError);

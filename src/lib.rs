@@ -27,16 +27,6 @@ extern crate tokio;
 extern crate toml;
 extern crate twox_hash;
 
-macro_rules! impl_enum_from {
-    ($ext_type:ty, $enum:ident, $variant:ident) => {
-        impl From<$ext_type> for $enum {
-            fn from(err: $ext_type) -> Self {
-                $enum::$variant(err)
-            }
-        }
-    };
-}
-
 macro_rules! zero_format {
     ($str:expr, $expr:expr) => {{
         let num = $expr;
