@@ -38,6 +38,10 @@ impl<T> Retry<T> {
     {
         self.data.clone()
     }
+
+    pub fn into_data(self) -> T {
+        self.data
+    }
 }
 
 /// A wrapper around a `DelayQueue` which inserts requests from a `Stream` of `Retry`.

@@ -27,7 +27,7 @@ thread = { interval = 60, max_interval = 200, max_concurrent = 75 }
 thread_list = { interval = 60, max_interval = 180, max_concurrent = 50 }
 
 
-# Exponential backoff for retrying failed requests
+# Exponential backoff for retrying failed media and thread requests
 [network.retry_backoff]
 # The first delay is `base` seconds. The next delay is `base * factor` seconds, then
 # `base * factor ^ 2` seconds, and so on. Once the delay is more than `max`, the request will no

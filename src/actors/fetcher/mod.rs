@@ -151,6 +151,10 @@ impl Fetcher {
         let thread_sender = {
             let (sender, receiver) = mpsc::channel(THREAD_CHANNEL_CAPACITY);
             let client = client.clone();
+
+            let (retry_sender, retry_receiver) = mpsc::channel(THREAD_CHANNEL_CAPACITY);
+            let retry_backoff = config.network.retry_backoff;
+
             let future = receiver
                 .map(|(msg, last_modified): (FetchThreads, Vec<DateTime<Utc>>)| {
                     let FetchThreads(board, nums, from_archive_json) = msg;
@@ -160,13 +164,15 @@ impl Fetcher {
                         },
                     )
                 }).flatten()
-                .map(move |(request, last_modified)| {
+                .map(move |request| Retry::new(request, &retry_backoff))
+                .select(RetryQueue::new(retry_receiver))
+                .map(move |retry| {
                     fetch_thread(
-                        request,
-                        last_modified,
+                        retry,
                         &client,
                         fetcher.clone(),
                         thread_updater.clone(),
+                        retry_sender.clone(),
                     )
                 }).rate_limit(&config.network.rate_limiting.thread)
                 .consume();
@@ -278,13 +284,13 @@ impl<'a> ToUri for &'a FetchThread {
 }
 
 fn fetch_thread(
-    request: FetchThread,
-    last_modified: DateTime<Utc>,
+    retry: Retry<(FetchThread, DateTime<Utc>)>,
     client: &Arc<HttpsClient>,
     fetcher: Addr<Fetcher>,
     thread_updater: Addr<ThreadUpdater>,
+    retry_sender: Sender<Retry<(FetchThread, DateTime<Utc>)>>,
 ) -> impl Future<Item = (), Error = ()> {
-    fetch_with_last_modified(&request, last_modified, client, fetcher)
+    fetch_with_last_modified(&retry.as_data().0, retry.as_data().1, client, fetcher)
         .and_then(move |(body, last_modified)| {
             let PostsWrapper { posts } = serde_json::from_slice(&body)?;
             if posts.is_empty() {
@@ -293,8 +299,40 @@ fn fetch_thread(
                 Ok((posts, last_modified))
             }
         }).then(move |result| {
-            let reply = FetchedThread { request, result };
-            thread_updater.send(reply).map_err(|err| log_error!(&err))
+            use self::FetchError::*;
+            if let Err(ref err) = result {
+                let will_retry = retry.can_retry() && match err {
+                    NotFound(_) | NotModified => false,
+                    ExistingMedia => unreachable!(),
+                    _ => true,
+                };
+
+                // TODO: Remove scope when NLL stabilizes
+                {
+                    let &(FetchThread(board, no, _), _) = retry.as_data();
+                    error!(
+                        "/{}/ No. {}: Failed to fetch, {}retrying: {}",
+                        board,
+                        no,
+                        if will_retry { "" } else { "not " },
+                        err
+                    );
+                }
+
+                if will_retry {
+                    return Either::A(
+                        retry_sender
+                            .send(retry)
+                            .map(|_| ())
+                            .map_err(|err| error!("{}", err)),
+                    );
+                }
+            }
+            let reply = FetchedThread {
+                request: retry.into_data().0,
+                result,
+            };
+            Either::B(thread_updater.send(reply).map_err(|err| log_error!(&err)))
         })
 }
 
