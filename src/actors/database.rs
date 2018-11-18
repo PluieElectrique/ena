@@ -187,6 +187,8 @@ impl Handler<InsertPosts> for Database {
     type Result = ResponseFuture<Vec<String>, my::errors::Error>;
 
     fn handle(&mut self, msg: InsertPosts, _ctx: &mut Self::Context) -> Self::Result {
+        assert!(!msg.2.is_empty(), "Cannot insert empty thread");
+
         let board = msg.0;
         let num_start = msg.2[0].no;
         let num_end = msg.2[msg.2.len() - 1].no;
@@ -272,9 +274,7 @@ impl Handler<InsertPosts> for Database {
             params
         });
 
-        let next_num_query = NEXT_NUM_QUERY.replace(BOARD_REPLACE, &msg.0.to_string());
         let insert_query = INSERT_QUERY.replace(BOARD_REPLACE, &msg.0.to_string());
-        let new_media_query = NEW_MEDIA_QUERY.replace(BOARD_REPLACE, &msg.0.to_string());
 
         if !self.download_media && !self.download_thumbs {
             Box::new(
@@ -284,6 +284,9 @@ impl Handler<InsertPosts> for Database {
                     .map(|_conn| vec![]),
             )
         } else {
+            let next_num_query = NEXT_NUM_QUERY.replace(BOARD_REPLACE, &msg.0.to_string());
+            let new_media_query = NEW_MEDIA_QUERY.replace(BOARD_REPLACE, &msg.0.to_string());
+
             let thread_num = msg.1;
             let download_media = self.download_media;
             let download_thumbs = self.download_thumbs;
