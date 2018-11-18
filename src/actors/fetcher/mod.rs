@@ -115,7 +115,9 @@ impl Fetcher {
                         use self::FetchError::*;
                         let will_retry = retry.can_retry() && match err {
                             ExistingMedia | NotFound(_) => false,
-                            EmptyData | JsonError(_) | NotModified => unreachable!(),
+                            EmptyData | InvalidReplyTo | JsonError(_) | NotModified => {
+                                unreachable!()
+                            }
                             _ => true,
                         };
 
@@ -295,6 +297,8 @@ fn fetch_thread(
             let PostsWrapper { posts } = serde_json::from_slice(&body)?;
             if posts.is_empty() {
                 Err(FetchError::EmptyData)
+            } else if posts[0].reply_to != 0 || posts.iter().skip(1).any(|p| p.reply_to == 0) {
+                Err(FetchError::InvalidReplyTo)
             } else {
                 Ok((posts, last_modified))
             }

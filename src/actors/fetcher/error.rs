@@ -19,6 +19,9 @@ pub enum FetchError {
     #[fail(display = "Hyper error: {}", _0)]
     HyperError(hyper::Error),
 
+    #[fail(display = "Thread has invalid `resto` values")]
+    InvalidReplyTo,
+
     #[fail(display = "IO error: {}", _0)]
     IoError(std::io::Error),
 
