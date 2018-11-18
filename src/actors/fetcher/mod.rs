@@ -151,9 +151,9 @@ impl Fetcher {
                         },
                     )
                 }).flatten()
-                .map(move |(msg, last_modified)| {
+                .map(move |(request, last_modified)| {
                     fetch_thread(
-                        msg,
+                        request,
                         last_modified,
                         &client,
                         fetcher.clone(),
@@ -192,17 +192,17 @@ impl Fetcher {
     }
 }
 
-fn fetch_with_last_modified<'a, M: 'a>(
-    msg: &'a M,
+fn fetch_with_last_modified<'a, R: 'a>(
+    request: &'a R,
     last_modified: DateTime<Utc>,
     client: &Arc<HttpsClient>,
     fetcher: Addr<Fetcher>,
 ) -> impl Future<Item = (hyper::Chunk, DateTime<Utc>), Error = FetchError>
 where
-    &'a M: ToUri + Into<LastModifiedKey>,
+    &'a R: ToUri + Into<LastModifiedKey>,
 {
-    let uri = msg.to_uri();
-    let key = msg.into();
+    let uri = request.to_uri();
+    let key = request.into();
 
     let mut request = Request::get(uri.clone()).body(Body::default()).unwrap();
     {
@@ -265,13 +265,13 @@ impl<'a> ToUri for &'a FetchThread {
 }
 
 fn fetch_thread(
-    msg: FetchThread,
+    request: FetchThread,
     last_modified: DateTime<Utc>,
     client: &Arc<HttpsClient>,
     fetcher: Addr<Fetcher>,
     thread_updater: Addr<ThreadUpdater>,
 ) -> impl Future<Item = (), Error = ()> {
-    fetch_with_last_modified(&msg, last_modified, client, fetcher)
+    fetch_with_last_modified(&request, last_modified, client, fetcher)
         .and_then(move |(body, last_modified)| {
             let PostsWrapper { posts } = serde_json::from_slice(&body)?;
             if posts.is_empty() {
@@ -280,10 +280,7 @@ fn fetch_thread(
                 Ok((posts, last_modified))
             }
         }).then(move |result| {
-            let reply = FetchedThread {
-                request: msg,
-                result,
-            };
+            let reply = FetchedThread { request, result };
             thread_updater.send(reply).map_err(|err| log_error!(&err))
         })
 }
