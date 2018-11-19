@@ -75,29 +75,14 @@ impl<'a> ToUri for &'a FetchThreadList {
 impl Handler<FetchThreadList> for Fetcher {
     type Result = RateLimitedResponse<(Vec<Thread>, DateTime<Utc>), FetchError>;
     fn handle(&mut self, msg: FetchThreadList, ctx: &mut Self::Context) -> Self::Result {
-        let last_modified = self.get_last_modified(&msg);
-        let future = Box::new(
-            fetch_with_last_modified(&msg, last_modified, &self.client, ctx.address())
-                .from_err()
-                .and_then(move |(body, last_modified)| {
-                    let threads: Vec<ThreadPage> = serde_json::from_slice(&body)?;
-                    let mut threads = threads.into_iter().fold(vec![], |mut acc, mut page| {
-                        acc.append(&mut page.threads);
-                        acc
-                    });
-                    for (i, thread) in threads.iter_mut().enumerate() {
-                        thread.bump_index = i;
-                    }
-                    if threads.is_empty() {
-                        Err(FetchError::EmptyData)
-                    } else {
-                        Ok((threads, last_modified))
-                    }
-                }),
-        );
         RateLimitedResponse {
             sender: self.thread_list_sender.clone(),
-            future,
+            future: fetch_thread_list(
+                &msg,
+                self.get_last_modified(&msg),
+                &self.client,
+                ctx.address(),
+            ),
         }
     }
 }
@@ -118,28 +103,9 @@ impl ToUri for FetchArchive {
 impl Handler<FetchArchive> for Fetcher {
     type Result = RateLimitedResponse<Vec<u64>, FetchError>;
     fn handle(&mut self, msg: FetchArchive, _ctx: &mut Self::Context) -> Self::Result {
-        assert!(msg.0.is_archived());
-        let client = self.client.clone();
-        let request = Request::get(msg.to_uri()).body(Body::default()).unwrap();
-        let future = Box::new(
-            future::lazy(move || client.request(request))
-                .from_err()
-                .and_then(move |res| match res.status() {
-                    StatusCode::OK => Ok(res),
-                    _ => Err(res.status().into()),
-                }).and_then(|res| res.into_body().concat2().from_err())
-                .and_then(move |body| {
-                    let archive: Vec<u64> = serde_json::from_slice(&body)?;
-                    if archive.is_empty() {
-                        Err(FetchError::EmptyData)
-                    } else {
-                        Ok(archive)
-                    }
-                }),
-        );
         RateLimitedResponse {
             sender: self.thread_list_sender.clone(),
-            future,
+            future: fetch_archive(&msg, &self.client),
         }
     }
 }

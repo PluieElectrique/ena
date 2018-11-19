@@ -340,6 +340,57 @@ fn fetch_thread(
         })
 }
 
+fn fetch_thread_list(
+    msg: &FetchThreadList,
+    last_modified: DateTime<Utc>,
+    client: &Arc<HttpsClient>,
+    fetcher: Addr<Fetcher>,
+) -> Box<Future<Item = (Vec<Thread>, DateTime<Utc>), Error = FetchError>> {
+    Box::new(
+        fetch_with_last_modified(msg, last_modified, client, fetcher)
+            .from_err()
+            .and_then(move |(body, last_modified)| {
+                let threads: Vec<ThreadPage> = serde_json::from_slice(&body)?;
+                let mut threads = threads.into_iter().fold(vec![], |mut acc, mut page| {
+                    acc.append(&mut page.threads);
+                    acc
+                });
+                for (i, thread) in threads.iter_mut().enumerate() {
+                    thread.bump_index = i;
+                }
+                if threads.is_empty() {
+                    Err(FetchError::EmptyData)
+                } else {
+                    Ok((threads, last_modified))
+                }
+            }),
+    )
+}
+
+fn fetch_archive(
+    msg: &FetchArchive,
+    client: &Arc<HttpsClient>,
+) -> Box<Future<Item = Vec<u64>, Error = FetchError>> {
+    assert!(msg.0.is_archived());
+    Box::new(
+        client
+            .get(msg.to_uri())
+            .from_err()
+            .and_then(move |res| match res.status() {
+                StatusCode::OK => Ok(res),
+                _ => Err(res.status().into()),
+            }).and_then(|res| res.into_body().concat2().from_err())
+            .and_then(move |body| {
+                let archive: Vec<u64> = serde_json::from_slice(&body)?;
+                if archive.is_empty() {
+                    Err(FetchError::EmptyData)
+                } else {
+                    Ok(archive)
+                }
+            }),
+    )
+}
+
 fn fetch_media(
     (board, filename): (Board, String),
     client: &Arc<HttpsClient>,
