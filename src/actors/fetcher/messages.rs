@@ -53,12 +53,6 @@ impl Handler<FetchThreads> for Fetcher {
     }
 }
 
-#[derive(Message)]
-pub struct FetchedThread {
-    pub request: FetchThread,
-    pub result: Result<(Vec<Post>, DateTime<Utc>), FetchError>,
-}
-
 pub struct FetchThreadList(pub Board);
 impl Message for FetchThreadList {
     type Result = Result<(Vec<Thread>, DateTime<Utc>), FetchError>;

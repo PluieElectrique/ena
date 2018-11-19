@@ -20,7 +20,7 @@ use serde_json;
 use tokio;
 use tokio::runtime::Runtime;
 
-use actors::ThreadUpdater;
+use actors::thread_updater::{FetchedThread, ThreadUpdater};
 use config::Config;
 use four_chan::*;
 

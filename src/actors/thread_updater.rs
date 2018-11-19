@@ -221,6 +221,12 @@ impl ThreadUpdater {
     }
 }
 
+#[derive(Message)]
+pub struct FetchedThread {
+    pub request: FetchThread,
+    pub result: Result<(Vec<Post>, DateTime<Utc>), FetchError>,
+}
+
 impl Handler<FetchedThread> for ThreadUpdater {
     type Result = ();
 
