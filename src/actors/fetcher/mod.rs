@@ -74,6 +74,11 @@ impl Actor for Fetcher {
 }
 
 impl Fetcher {
+    /// Creates and starts a new `Fetcher` actor.
+    // We don't let the caller start the actor themselves because Fetcher needs to hold its own
+    // address. To do this, we first create a Context, which gives us Addr<Fetcher> without having
+    // to create Fetcher. Then, we pass this Addr into new(). Finally, we start the resulting actor
+    // with the previously created Context.
     pub fn create(
         config: &Config,
         thread_updater: Addr<ThreadUpdater>,
@@ -86,6 +91,7 @@ impl Fetcher {
         Ok(ctx.run(fetcher))
     }
 
+    /// Returns a new `Fetcher` struct.
     fn new(
         config: &Config,
         thread_updater: Addr<ThreadUpdater>,

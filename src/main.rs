@@ -51,6 +51,11 @@ fn main() {
             .start(|_| database)
     };
 
+    // To create ThreadUpdater, we need Addr<Fetcher>. But to create Fetcher, we need
+    // Addr<ThreadUpdater>! To solve this circular dependency, we first create ThreadUpdater's
+    // Context. This gives us Addr<ThreadUpdater> without having to create ThreadUpdater. We then
+    // use this Addr to create Fetcher, which gives us Addr<Fetcher>. Finally, we pass this Addr to
+    // ThreadUpdater::new, and run ThreadUpdater in its previously created Context.
     let thread_updater_ctx = {
         let (_, receiver) = actix::dev::channel::channel(THREAD_UPDATER_MAILBOX_CAPACITY);
         Context::with_receiver(receiver)
