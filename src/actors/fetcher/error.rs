@@ -10,8 +10,8 @@ pub enum FetchError {
     #[fail(display = "Bad status: {}", _0)]
     BadStatus(hyper::StatusCode),
 
-    #[fail(display = "API returned empty data")]
-    EmptyData,
+    #[fail(display = "Thread has no posts")]
+    EmptyThread,
 
     #[fail(display = "Media already exists")]
     ExistingMedia,

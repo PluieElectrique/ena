@@ -83,7 +83,12 @@ impl BoardPoller {
         use self::ThreadUpdate::*;
         let mut updates = vec![];
 
-        let push_removed = {
+        let push_removed: Box<Fn(&Thread, &mut Vec<_>)> = if curr_threads.is_empty() {
+            // If the board is completely empty, all threads must have been deleted
+            Box::new(|thread, updates| {
+                updates.push(Deleted(thread.no));
+            })
+        } else {
             let last_thread = &curr_threads[curr_threads.len() - 1];
             let anchor_index = self.threads[&board]
                 .iter()
@@ -97,7 +102,7 @@ impl BoardPoller {
                 .filter(|thread| thread.last_modified == last_thread.last_modified)
                 .map(|thread| thread.bump_index);
 
-            move |thread: &Thread, updates: &mut Vec<_>| {
+            Box::new(move |thread, updates| {
                 match anchor_index {
                     Some(anchor) => {
                         if thread.bump_index < anchor {
@@ -112,7 +117,7 @@ impl BoardPoller {
                         updates.push(BumpedOff(thread.no));
                     }
                 }
-            }
+            })
         };
 
         // Sort ascending by no
@@ -239,11 +244,13 @@ impl BoardPoller {
                             len,
                             if len == 1 { "" } else { "s" },
                         );
-                        Arbiter::spawn(
-                            act.thread_updater
-                                .send(ArchiveUpdate(board, threads))
-                                .map_err(|err| error!("{}", err)),
-                        );
+                        if !threads.is_empty() {
+                            Arbiter::spawn(
+                                act.thread_updater
+                                    .send(ArchiveUpdate(board, threads))
+                                    .map_err(|err| error!("{}", err)),
+                            );
+                        }
                     }
                     Err(err) => error!("/{}/: Failed to fetch archive: {}", board, err),
                 }).map_err(move |err, _act, _ctx| {

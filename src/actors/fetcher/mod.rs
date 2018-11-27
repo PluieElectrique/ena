@@ -121,7 +121,7 @@ impl Fetcher {
                         use self::FetchError::*;
                         let will_retry = retry.can_retry() && match err {
                             ExistingMedia | NotFound(_) => false,
-                            EmptyData | InvalidReplyTo | JsonError(_) | NotModified => {
+                            EmptyThread | InvalidReplyTo | JsonError(_) | NotModified => {
                                 unreachable!()
                             }
                             _ => true,
@@ -302,7 +302,7 @@ fn fetch_thread(
         .and_then(move |(body, last_modified)| {
             let PostsWrapper { posts } = serde_json::from_slice(&body)?;
             if posts.is_empty() {
-                Err(FetchError::EmptyData)
+                Err(FetchError::EmptyThread)
             } else if posts[0].reply_to != 0 || posts.iter().skip(1).any(|p| p.reply_to == 0) {
                 Err(FetchError::InvalidReplyTo)
             } else {
@@ -364,11 +364,7 @@ fn fetch_thread_list(
                 for (i, thread) in threads.iter_mut().enumerate() {
                     thread.bump_index = i;
                 }
-                if threads.is_empty() {
-                    Err(FetchError::EmptyData)
-                } else {
-                    Ok((threads, last_modified))
-                }
+                Ok((threads, last_modified))
             }),
     )
 }
@@ -388,11 +384,7 @@ fn fetch_archive(
             }).and_then(|res| res.into_body().concat2().from_err())
             .and_then(move |body| {
                 let archive: Vec<u64> = serde_json::from_slice(&body)?;
-                if archive.is_empty() {
-                    Err(FetchError::EmptyData)
-                } else {
-                    Ok(archive)
-                }
+                Ok(archive)
             }),
     )
 }
