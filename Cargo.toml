@@ -10,7 +10,7 @@ license = "AGPL-3.0"
 actix = { version = "0.7", default-features = false }
 chrono = { version = "0.4", default-features = false }
 chrono-tz = "0.5"
-env_logger = "0.5"
+env_logger = "0.6"
 failure = "0.1"
 futures = "0.1"
 hyper = { version = "0.12", default-features = false }
