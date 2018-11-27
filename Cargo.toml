@@ -6,6 +6,9 @@ authors = ["Pluie"]
 description = "A 4chan scraper"
 license = "AGPL-3.0"
 
+[features]
+vendored-openssl = ["hyper-tls/vendored"]
+
 [dependencies]
 actix = { version = "0.7", default-features = false }
 chrono = { version = "0.4", default-features = false }
@@ -15,7 +18,7 @@ failure = "0.1"
 futures = "0.1"
 hyper = { version = "0.12", default-features = false }
 hyper-tls = "0.3"
-lazy_static = "1.1"
+lazy_static = "1.2"
 log = "0.4"
 mysql_async = "0.15"
 pest = "2.0"
