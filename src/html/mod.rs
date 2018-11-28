@@ -150,7 +150,7 @@ fn serialize(output: &mut String, pairs: Pairs<Rule>) {
                 let mut inner = pair.into_inner();
                 output.push_str(inner.next().unwrap().as_str());
                 output.push_str("\"]");
-                serialize(output, inner);
+                output.push_str(inner.next().unwrap().as_str());
                 output.push_str("[/fortune]");
             }
             Rule::shiftjis => {
