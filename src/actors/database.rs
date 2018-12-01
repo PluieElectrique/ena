@@ -96,7 +96,8 @@ pub struct Database {
 
 impl Database {
     pub fn new(config: &Config) -> Result<Self, my::errors::Error> {
-        let pool = Pool::new(&config.database_media.database_url);
+        let pool_opts = my::Opts::from_url(&config.database_media.database_url)?;
+        let pool = Pool::new(pool_opts);
         let mut runtime = Runtime::new().unwrap();
 
         if config.asagi_compat.create_index_counters {
