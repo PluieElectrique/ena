@@ -140,64 +140,58 @@ pub fn parse_config() -> Result<Config, failure::Error> {
     Ok(config)
 }
 
-fn duration_from_secs<'de, D>(deserializer: D) -> Result<Duration, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let secs: u64 = Deserialize::deserialize(deserializer)?;
-    Ok(Duration::from_secs(secs))
+macro_rules! deserialize_validate {
+    ($name:ident, $from:ty => $to:ty, $pred:expr, $ok:expr, $err:expr $(,)*) => {
+        fn $name<'de, D>(deserializer: D) -> Result<$to, D::Error>
+        where
+            D: Deserializer<'de>,
+        {
+            let data: $from = Deserialize::deserialize(deserializer)?;
+            if $pred(&data) {
+                Ok($ok(data))
+            } else {
+                Err(D::Error::custom($err))
+            }
+        }
+    };
 }
 
-fn nonzero_duration_from_secs<'de, D>(deserializer: D) -> Result<Duration, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let secs: u64 = Deserialize::deserialize(deserializer)?;
+deserialize_validate!(
+    duration_from_secs,
+    u64 => Duration,
+    |_| true,
+    |secs| Duration::from_secs(secs),
+    "",
+);
 
-    if secs == 0 {
-        Err(D::Error::custom("interval must be at least 1 second"))
-    } else {
-        Ok(Duration::from_secs(secs))
-    }
-}
+deserialize_validate!(
+    nonzero_duration_from_secs,
+    u64 => Duration,
+    |&secs| secs != 0,
+    |secs| Duration::from_secs(secs),
+    "interval must be at least 1 second",
+);
 
-fn validate_max_interval<'de, D>(deserializer: D) -> Result<usize, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let max_interval: usize = Deserialize::deserialize(deserializer)?;
+deserialize_validate!(
+    validate_max_interval,
+    usize => usize,
+    |&max| max != 0,
+    |max| max,
+    "`max_interval` must be at least 1",
+);
 
-    if max_interval == 0 {
-        Err(D::Error::custom("`max_interval` must be at least 1"))
-    } else {
-        Ok(max_interval)
-    }
-}
+deserialize_validate!(
+    validate_max_concurrent,
+    usize => usize,
+    |&max| max != 0,
+    |max| max,
+    "`max_concurrent` must be at least 1",
+);
 
-fn validate_max_concurrent<'de, D>(deserializer: D) -> Result<usize, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let max_concurrent: usize = Deserialize::deserialize(deserializer)?;
-
-    if max_concurrent == 0 {
-        Err(D::Error::custom("`max_concurrent` must be at least 1"))
-    } else {
-        Ok(max_concurrent)
-    }
-}
-
-fn validate_media_path<'de, D>(deserializer: D) -> Result<PathBuf, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let media_path: String = Deserialize::deserialize(deserializer)?;
-
-    if media_path.is_empty() {
-        Err(D::Error::custom(
-            "media path must not be empty (use \".\" for current directory)",
-        ))
-    } else {
-        Ok(PathBuf::from(media_path))
-    }
-}
+deserialize_validate!(
+    validate_media_path,
+    String => PathBuf,
+    |s: &str| !s.is_empty(),
+    |s| PathBuf::from(s),
+    "media path must not be empty (use \".\" for current directory)",
+);
