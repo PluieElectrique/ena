@@ -71,9 +71,11 @@ pub struct RetryBackoffConfig {
 /// A struct for database and media directory configuration.
 #[derive(Deserialize)]
 pub struct DatabaseMediaConfig {
+    #[serde(deserialize_with = "nonempty_string")]
     pub database_url: String,
+    #[serde(deserialize_with = "nonempty_string")]
     pub charset: String,
-    #[serde(deserialize_with = "validate_media_path")]
+    #[serde(deserialize_with = "pathbuf_from_string")]
     pub media_path: PathBuf,
 }
 
@@ -87,19 +89,17 @@ pub struct AsagiCompatibilityConfig {
 }
 
 /// Configuration parsing errors.
+///
+/// Note: most of the configuration checking is done through (a kludge of) Serde's
+/// `deserialize_with` attributes and the `deserialize_validate!` macro. This enum is used for
+/// errors which don't work well with Serde's custom error message format.
 #[derive(Debug, Fail)]
 pub enum ConfigError {
-    #[fail(display = "`database_media.charset` must not be empty")]
-    EmptyCharset,
-
-    #[fail(display = "`database_media.database_url` must not be empty")]
-    EmptyDatabaseUrl,
-
-    #[fail(display = "`scraping.boards` must contain at least one board to scrape")]
+    #[fail(display = "Invalid config: `scraping.boards` must contain at least one board")]
     NoBoards,
 
-    #[fail(display = "`network.retry_backoff.factor` must be at least 2")]
-    ZeroRetryFactor,
+    #[fail(display = "Invalid config: `network.retry_backoff.factor` must be at least 2")]
+    SmallRetryFactor,
 }
 
 /// Read the configuration file `ena.toml` and parse it.
@@ -117,12 +117,8 @@ pub fn parse_config() -> Result<Config, failure::Error> {
 
     if config.scraping.boards.is_empty() {
         return Err(ConfigError::NoBoards.into());
-    } else if config.database_media.charset.is_empty() {
-        return Err(ConfigError::EmptyCharset.into());
-    } else if config.database_media.database_url.is_empty() {
-        return Err(ConfigError::EmptyDatabaseUrl.into());
     } else if config.network.retry_backoff.factor < 2 {
-        return Err(ConfigError::ZeroRetryFactor.into());
+        return Err(ConfigError::SmallRetryFactor.into());
     }
 
     fs::create_dir_all(&config.database_media.media_path)
@@ -140,7 +136,21 @@ pub fn parse_config() -> Result<Config, failure::Error> {
     Ok(config)
 }
 
+/// Create a function for use with Serde's `deserialize_with` attribute which deserializes and/or
+/// validates a field.
+// This is a kludge, but it allow us to print error messages with context and doesn't require
+// procedural macros, another dependency, or copy-pasted code.
 macro_rules! deserialize_validate {
+    ($name:ident, $type:ty, $pred:expr, $err:expr $(,)*) => {
+        deserialize_validate!(
+            $name,
+            $type => $type,
+            $pred,
+            |a| a,
+            $err,
+        );
+    };
+
     ($name:ident, $from:ty => $to:ty, $pred:expr, $ok:expr, $err:expr $(,)*) => {
         fn $name<'de, D>(deserializer: D) -> Result<$to, D::Error>
         where
@@ -155,6 +165,21 @@ macro_rules! deserialize_validate {
         }
     };
 }
+
+deserialize_validate!(
+    nonempty_string,
+    String,
+    |s: &str| !s.is_empty(),
+    "string must not be empty",
+);
+
+deserialize_validate!(
+    pathbuf_from_string,
+    String => PathBuf,
+    |s: &str| !s.is_empty(),
+    |s| PathBuf::from(s),
+    "path must not be empty (use \".\" for current dir)",
+);
 
 deserialize_validate!(
     duration_from_secs,
@@ -174,24 +199,14 @@ deserialize_validate!(
 
 deserialize_validate!(
     validate_max_interval,
-    usize => usize,
+    usize,
     |&max| max != 0,
-    |max| max,
     "`max_interval` must be at least 1",
 );
 
 deserialize_validate!(
     validate_max_concurrent,
-    usize => usize,
+    usize,
     |&max| max != 0,
-    |max| max,
     "`max_concurrent` must be at least 1",
-);
-
-deserialize_validate!(
-    validate_media_path,
-    String => PathBuf,
-    |s: &str| !s.is_empty(),
-    |s| PathBuf::from(s),
-    "media path must not be empty (use \".\" for current directory)",
 );
