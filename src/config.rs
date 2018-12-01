@@ -12,7 +12,6 @@ use serde::{Deserialize, Deserializer};
 
 use four_chan::Board;
 
-/// The main configuration file struct.
 #[derive(Deserialize)]
 pub struct Config {
     pub scraping: ScrapingConfig,
@@ -21,7 +20,6 @@ pub struct Config {
     pub asagi_compat: AsagiCompatibilityConfig,
 }
 
-/// A struct for scraping configuration.
 #[derive(Deserialize)]
 pub struct ScrapingConfig {
     pub boards: Vec<Board>,
@@ -32,14 +30,12 @@ pub struct ScrapingConfig {
     pub download_thumbs: bool,
 }
 
-/// The struct for network (general API request settings) configuration.
 #[derive(Deserialize)]
 pub struct NetworkConfig {
     pub rate_limiting: RateLimitingConfig,
     pub retry_backoff: RetryBackoffConfig,
 }
 
-/// The struct for the rate limiting configuration section.
 #[derive(Deserialize)]
 pub struct RateLimitingConfig {
     pub media: RateLimitingSettings,
@@ -47,7 +43,6 @@ pub struct RateLimitingConfig {
     pub thread_list: RateLimitingSettings,
 }
 
-/// A struct for individual rate limiting settings.
 #[derive(Deserialize)]
 pub struct RateLimitingSettings {
     #[serde(deserialize_with = "nonzero_duration_from_secs")]
@@ -58,7 +53,6 @@ pub struct RateLimitingSettings {
     pub max_concurrent: usize,
 }
 
-/// The struct for configuration of the exponential backoff for request retrying.
 #[derive(Clone, Copy, Deserialize)]
 pub struct RetryBackoffConfig {
     #[serde(deserialize_with = "nonzero_duration_from_secs")]
@@ -68,7 +62,6 @@ pub struct RetryBackoffConfig {
     pub max: Duration,
 }
 
-/// A struct for database and media directory configuration.
 #[derive(Deserialize)]
 pub struct DatabaseMediaConfig {
     #[serde(deserialize_with = "nonempty_string")]
@@ -79,7 +72,6 @@ pub struct DatabaseMediaConfig {
     pub media_path: PathBuf,
 }
 
-/// A struct for Asagi compatibility configuration.
 #[derive(Deserialize)]
 pub struct AsagiCompatibilityConfig {
     pub adjust_timestamps: bool,
