@@ -112,6 +112,8 @@ pub fn parse_config() -> Result<Config, failure::Error> {
         .context("Could not read ena.toml")?;
 
     let mut config: Config = toml::from_str(&contents).context("Could not parse ena.toml")?;
+    config.scraping.boards.sort();
+    config.scraping.boards.dedup();
 
     if config.scraping.boards.is_empty() {
         return Err(ConfigError::NoBoards.into());
@@ -129,9 +131,6 @@ pub fn parse_config() -> Result<Config, failure::Error> {
     test_file.push("ena_permission_test");
     File::create(&test_file).context("Could not create test file in media directory")?;
     fs::remove_file(&test_file).context("Could not remove media directory permission test file")?;
-
-    config.scraping.boards.sort();
-    config.scraping.boards.dedup();
 
     if config.scraping.poll_interval.as_secs() < 10 {
         warn!("4chan API rules recommend a minimum `poll_interval` of 10 seconds");
