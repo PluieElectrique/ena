@@ -98,7 +98,7 @@ impl Fetcher {
         fetcher: Addr<Self>,
     ) -> Result<Self, Error> {
         let mut runtime = Runtime::new().unwrap();
-        let https = HttpsConnector::new(2).context("Could not create HttpsConnector")?;
+        let https = HttpsConnector::new(1).context("Could not create HttpsConnector")?;
         let client = Arc::new(Client::builder().build::<_, Body>(https));
 
         let media_sender = {
