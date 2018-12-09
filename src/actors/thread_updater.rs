@@ -116,40 +116,39 @@ impl ThreadUpdater {
         let mut new_posts = vec![];
         let mut modified_posts = vec![];
         let mut deleted_posts = vec![];
-        // TODO: Remove scope when NLL stabilizes
-        {
-            let mut prev_iter = prev_meta.posts.iter();
-            let mut curr_iter = curr_meta.posts.iter().enumerate();
 
-            let mut curr_meta = curr_iter.next();
+        let mut prev_iter = prev_meta.posts.iter();
+        let mut curr_iter = curr_meta.posts.iter().enumerate();
 
-            loop {
-                match (prev_iter.next(), curr_meta) {
-                    (Some(prev), Some((i, curr))) => {
-                        if prev.no == curr.no {
-                            if prev.metadata != curr.metadata {
-                                modified_posts.push((
-                                    thread[i].no,
-                                    thread[i].comment.take(),
-                                    thread[i].image.as_ref().map(|i| i.spoiler),
-                                ));
-                            }
-                            curr_meta = curr_iter.next();
-                        } else {
-                            deleted_posts.push((prev.no, RemovedStatus::Deleted));
+        let mut curr_meta = curr_iter.next();
+
+        loop {
+            match (prev_iter.next(), curr_meta) {
+                (Some(prev), Some((i, curr))) => {
+                    if prev.no == curr.no {
+                        if prev.metadata != curr.metadata {
+                            modified_posts.push((
+                                thread[i].no,
+                                thread[i].comment.take(),
+                                thread[i].image.as_ref().map(|i| i.spoiler),
+                            ));
                         }
-                    }
-                    (Some(prev), None) => {
+                        curr_meta = curr_iter.next();
+                    } else {
                         deleted_posts.push((prev.no, RemovedStatus::Deleted));
                     }
-                    (None, Some((i, _))) => {
-                        new_posts = thread.split_off(i);
-                        break;
-                    }
-                    (None, None) => break,
                 }
+                (Some(prev), None) => {
+                    deleted_posts.push((prev.no, RemovedStatus::Deleted));
+                }
+                (None, Some((i, _))) => {
+                    new_posts = thread.split_off(i);
+                    break;
+                }
+                (None, None) => break,
             }
         }
+
         if log_enabled!(Level::Debug) {
             let n = new_posts.len();
             let m = modified_posts.len();

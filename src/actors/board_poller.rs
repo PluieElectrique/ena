@@ -125,38 +125,35 @@ impl BoardPoller {
         // Sort ascending by no
         curr_threads.sort_by(|a, b| a.no.cmp(&b.no));
 
-        // TODO: Remove scope when NLL stabilizes
-        {
-            let mut prev_iter = self.threads[&board].iter();
-            let mut curr_iter = curr_threads.iter();
+        let mut prev_iter = self.threads[&board].iter();
+        let mut curr_iter = curr_threads.iter();
 
-            let mut curr_thread = curr_iter.next();
+        let mut curr_thread = curr_iter.next();
 
-            loop {
-                match (prev_iter.next(), curr_thread) {
-                    (Some(prev), Some(curr)) => {
-                        assert!(prev.no <= curr.no);
+        loop {
+            match (prev_iter.next(), curr_thread) {
+                (Some(prev), Some(curr)) => {
+                    assert!(prev.no <= curr.no);
 
-                        if prev.no == curr.no {
-                            assert!(prev.last_modified <= curr.last_modified);
+                    if prev.no == curr.no {
+                        assert!(prev.last_modified <= curr.last_modified);
 
-                            if prev.last_modified < curr.last_modified {
-                                updates.push(Modified(curr.no));
-                            }
-                            curr_thread = curr_iter.next();
-                        } else if prev.no < curr.no {
-                            push_removed(prev, &mut updates);
+                        if prev.last_modified < curr.last_modified {
+                            updates.push(Modified(curr.no));
                         }
-                    }
-                    (Some(prev), None) => {
+                        curr_thread = curr_iter.next();
+                    } else if prev.no < curr.no {
                         push_removed(prev, &mut updates);
                     }
-                    (None, Some(curr)) => {
-                        updates.push(New(curr.no));
-                        curr_thread = curr_iter.next();
-                    }
-                    (None, None) => break,
                 }
+                (Some(prev), None) => {
+                    push_removed(prev, &mut updates);
+                }
+                (None, Some(curr)) => {
+                    updates.push(New(curr.no));
+                    curr_thread = curr_iter.next();
+                }
+                (None, None) => break,
             }
         }
 

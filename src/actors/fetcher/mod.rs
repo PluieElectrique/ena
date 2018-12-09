@@ -125,17 +125,14 @@ impl Fetcher {
                                 _ => true,
                             };
 
-                        // TODO: Remove scope when NLL stabilizes
-                        {
-                            let &(board, ref filename) = retry.as_data();
-                            error!(
-                                "/{}/: Failed to fetch media {}, {}retrying: {}",
-                                board,
-                                filename,
-                                if will_retry { "" } else { "not " },
-                                err
-                            );
-                        }
+                        let &(board, ref filename) = retry.as_data();
+                        error!(
+                            "/{}/: Failed to fetch media {}, {}retrying: {}",
+                            board,
+                            filename,
+                            if will_retry { "" } else { "not " },
+                            err
+                        );
 
                         if will_retry {
                             Either::A(
@@ -233,15 +230,12 @@ where
     let key = request.into();
 
     let mut request = Request::get(uri.clone()).body(Body::default()).unwrap();
-    {
-        let headers = request.headers_mut();
-        headers.reserve(1);
-        headers.insert(
-            header::IF_MODIFIED_SINCE,
-            HeaderValue::from_str(last_modified.format(RFC_1123_FORMAT).to_string().as_str())
-                .unwrap(),
-        );
-    }
+    let headers = request.headers_mut();
+    headers.reserve(1);
+    headers.insert(
+        header::IF_MODIFIED_SINCE,
+        HeaderValue::from_str(last_modified.format(RFC_1123_FORMAT).to_string().as_str()).unwrap(),
+    );
 
     client
         .request(request)
@@ -322,17 +316,14 @@ fn fetch_thread(
                         _ => true,
                     };
 
-                // TODO: Remove scope when NLL stabilizes
-                {
-                    let &(FetchThread(board, no, _), _) = retry.as_data();
-                    error!(
-                        "/{}/ No. {}: Failed to fetch, {}retrying: {}",
-                        board,
-                        no,
-                        if will_retry { "" } else { "not " },
-                        err
-                    );
-                }
+                let &(FetchThread(board, no, _), _) = retry.as_data();
+                error!(
+                    "/{}/ No. {}: Failed to fetch, {}retrying: {}",
+                    board,
+                    no,
+                    if will_retry { "" } else { "not " },
+                    err
+                );
 
                 if will_retry {
                     return Either::A(
