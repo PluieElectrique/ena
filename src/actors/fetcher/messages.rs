@@ -58,7 +58,7 @@ impl Message for FetchThreadList {
     type Result = Result<(Vec<Thread>, DateTime<Utc>), FetchError>;
 }
 
-impl<'a> ToUri for &'a FetchThreadList {
+impl ToUri for &FetchThreadList {
     fn to_uri(&self) -> Uri {
         format!("{}/{}/threads.json", API_URI_PREFIX, self.0)
             .parse()

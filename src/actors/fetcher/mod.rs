@@ -280,7 +280,7 @@ where
 
 pub struct FetchThread(pub Board, pub u64, pub bool);
 
-impl<'a> ToUri for &'a FetchThread {
+impl ToUri for &FetchThread {
     fn to_uri(&self) -> Uri {
         format!("{}/{}/thread/{}.json", API_URI_PREFIX, self.0, self.1)
             .parse()

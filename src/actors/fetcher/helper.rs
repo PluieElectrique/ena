@@ -13,19 +13,19 @@ pub trait ToUri {
 #[derive(Debug, Eq, Hash, PartialEq)]
 pub struct LastModifiedKey(Board, Option<u64>);
 
-impl<'a> From<&'a (Board, u64)> for LastModifiedKey {
+impl From<&(Board, u64)> for LastModifiedKey {
     fn from(msg: &(Board, u64)) -> Self {
         LastModifiedKey(msg.0, Some(msg.1))
     }
 }
 
-impl<'a> From<&'a FetchThread> for LastModifiedKey {
+impl From<&FetchThread> for LastModifiedKey {
     fn from(msg: &FetchThread) -> Self {
         LastModifiedKey(msg.0, Some(msg.1))
     }
 }
 
-impl<'a> From<&'a FetchThreadList> for LastModifiedKey {
+impl From<&FetchThreadList> for LastModifiedKey {
     fn from(msg: &FetchThreadList) -> Self {
         LastModifiedKey(msg.0, None)
     }

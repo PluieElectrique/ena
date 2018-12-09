@@ -337,7 +337,7 @@ struct PostMetadata {
     metadata: (Option<u64>, Option<bool>),
 }
 
-impl<'a> From<&'a Post> for PostMetadata {
+impl From<&Post> for PostMetadata {
     fn from(post: &Post) -> Self {
         let comment_hash = post.comment.as_ref().map(|c| {
             let mut hasher = XxHash::default();
