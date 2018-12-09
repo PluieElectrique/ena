@@ -33,8 +33,8 @@ impl<'a> From<&'a FetchThreadList> for LastModifiedKey {
 
 /// An Actix `MessageResponse` which lets us queue a future in our `RateLimiter`.
 pub struct RateLimitedResponse<I, E> {
-    pub sender: Sender<Box<Future<Item = (), Error = ()>>>,
-    pub future: Box<Future<Item = I, Error = E>>,
+    pub sender: Sender<Box<dyn Future<Item = (), Error = ()>>>,
+    pub future: Box<dyn Future<Item = I, Error = E>>,
 }
 
 impl<A, M, I: 'static, E: 'static> MessageResponse<A, M> for RateLimitedResponse<I, E>

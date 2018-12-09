@@ -51,7 +51,7 @@ pub struct Fetcher {
     last_modified: HashMap<LastModifiedKey, DateTime<Utc>>,
     media_sender: Sender<FetchMedia>,
     thread_sender: Sender<(FetchThreads, Vec<DateTime<Utc>>)>,
-    thread_list_sender: Sender<Box<Future<Item = (), Error = ()>>>,
+    thread_list_sender: Sender<Box<dyn Future<Item = (), Error = ()>>>,
     // Fetcher must use its own runtime for fetching media because tokio::fs functions can't use the
     // current_thread runtime that Actix provides
     runtime: Runtime,
@@ -356,7 +356,7 @@ fn fetch_thread_list(
     last_modified: DateTime<Utc>,
     client: &Arc<HttpsClient>,
     fetcher: Addr<Fetcher>,
-) -> Box<Future<Item = (Vec<Thread>, DateTime<Utc>), Error = FetchError>> {
+) -> Box<dyn Future<Item = (Vec<Thread>, DateTime<Utc>), Error = FetchError>> {
     Box::new(
         fetch_with_last_modified(msg, last_modified, client, fetcher)
             .from_err()
@@ -377,7 +377,7 @@ fn fetch_thread_list(
 fn fetch_archive(
     msg: &FetchArchive,
     client: &Arc<HttpsClient>,
-) -> Box<Future<Item = Vec<u64>, Error = FetchError>> {
+) -> Box<dyn Future<Item = Vec<u64>, Error = FetchError>> {
     assert!(msg.0.is_archived());
     Box::new(
         client

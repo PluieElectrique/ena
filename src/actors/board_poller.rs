@@ -85,7 +85,7 @@ impl BoardPoller {
         use self::ThreadUpdate::*;
         let mut updates = vec![];
 
-        let push_removed: Box<Fn(&Thread, &mut Vec<_>)> = if curr_threads.is_empty() {
+        let push_removed: Box<dyn Fn(&Thread, &mut Vec<_>)> = if curr_threads.is_empty() {
             // If the board is completely empty, all threads must have been deleted
             Box::new(|thread, updates| {
                 updates.push(Deleted(thread.no));
