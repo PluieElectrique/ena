@@ -21,7 +21,7 @@ hyper = { version = "0.12", default-features = false }
 hyper-tls = "0.3"
 lazy_static = "1.2"
 log = "0.4"
-my = { version = "0.15", package = "mysql_async" }
+mysql_async = "0.15"
 pest = "2.0"
 pest_derive = "2.0"
 regex = "1.0"

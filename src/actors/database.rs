@@ -2,7 +2,7 @@ use ::actix::prelude::*;
 use chrono::prelude::*;
 use chrono_tz::America;
 use futures::{future, prelude::*};
-use my::{params, prelude::*, Pool, Value};
+use mysql_async::{errors::Error, params, prelude::*, Opts, Pool, Value};
 use tokio::runtime::Runtime;
 
 use crate::{
@@ -95,8 +95,8 @@ pub struct Database {
 }
 
 impl Database {
-    pub fn new(config: &Config) -> Result<Self, my::errors::Error> {
-        let pool_opts = my::Opts::from_url(&config.database_media.database_url)?;
+    pub fn new(config: &Config) -> Result<Self, Error> {
+        let pool_opts = Opts::from_url(&config.database_media.database_url)?;
         let pool = Pool::new(pool_opts);
         let mut runtime = Runtime::new().unwrap();
 
@@ -144,11 +144,11 @@ impl Actor for Database {
 
 pub struct GetUnarchivedThreads(pub Board, pub Vec<u64>);
 impl Message for GetUnarchivedThreads {
-    type Result = Result<Vec<u64>, my::errors::Error>;
+    type Result = Result<Vec<u64>, Error>;
 }
 
 impl Handler<GetUnarchivedThreads> for Database {
-    type Result = ResponseFuture<Vec<u64>, my::errors::Error>;
+    type Result = ResponseFuture<Vec<u64>, Error>;
 
     fn handle(&mut self, msg: GetUnarchivedThreads, _ctx: &mut Self::Context) -> Self::Result {
         let params = msg.1.into_iter().map(|id| {
@@ -183,11 +183,11 @@ impl Handler<GetUnarchivedThreads> for Database {
 
 pub struct InsertPosts(pub Board, pub u64, pub Vec<Post>);
 impl Message for InsertPosts {
-    type Result = Result<Vec<String>, my::errors::Error>;
+    type Result = Result<Vec<String>, Error>;
 }
 
 impl Handler<InsertPosts> for Database {
-    type Result = ResponseFuture<Vec<String>, my::errors::Error>;
+    type Result = ResponseFuture<Vec<String>, Error>;
 
     fn handle(&mut self, msg: InsertPosts, _ctx: &mut Self::Context) -> Self::Result {
         assert!(!msg.2.is_empty(), "Cannot insert empty thread");
@@ -320,7 +320,7 @@ impl Handler<InsertPosts> for Database {
                     })
                     .and_then(move |results| {
                         results.reduce_and_drop(vec![], move |mut files: Vec<String>, row| {
-                            let (media, preview) = my::from_row(row);
+                            let (media, preview) = mysql_async::from_row(row);
                             if download_media {
                                 if let Some(media) = media {
                                     files.push(media);
@@ -342,11 +342,11 @@ impl Handler<InsertPosts> for Database {
 
 pub struct UpdateOp(pub Board, pub u64, pub OpData);
 impl Message for UpdateOp {
-    type Result = Result<(), my::errors::Error>;
+    type Result = Result<(), Error>;
 }
 
 impl Handler<UpdateOp> for Database {
-    type Result = ResponseFuture<(), my::errors::Error>;
+    type Result = ResponseFuture<(), Error>;
 
     fn handle(&mut self, msg: UpdateOp, _ctx: &mut Self::Context) -> Self::Result {
         let mut params = params! {
@@ -375,11 +375,11 @@ impl Handler<UpdateOp> for Database {
 
 pub struct UpdatePost(pub Board, pub Vec<(u64, Option<String>, Option<bool>)>);
 impl Message for UpdatePost {
-    type Result = Result<(), my::errors::Error>;
+    type Result = Result<(), Error>;
 }
 
 impl Handler<UpdatePost> for Database {
-    type Result = ResponseFuture<(), my::errors::Error>;
+    type Result = ResponseFuture<(), Error>;
 
     fn handle(&mut self, msg: UpdatePost, _ctx: &mut Self::Context) -> Self::Result {
         let params = msg.1.into_iter().map(move |(no, comment, spoiler)| {
@@ -406,11 +406,11 @@ pub enum RemovedStatus {
 
 pub struct MarkPostsRemoved(pub Board, pub Vec<(u64, RemovedStatus)>, pub DateTime<Utc>);
 impl Message for MarkPostsRemoved {
-    type Result = Result<(), my::errors::Error>;
+    type Result = Result<(), Error>;
 }
 
 impl Handler<MarkPostsRemoved> for Database {
-    type Result = ResponseFuture<(), my::errors::Error>;
+    type Result = ResponseFuture<(), Error>;
 
     fn handle(&mut self, msg: MarkPostsRemoved, _ctx: &mut Self::Context) -> Self::Result {
         let timestamp_expired = msg.2.adjust(self.adjust_timestamps);
