@@ -23,12 +23,12 @@ struct Board {
 }
 
 #[test]
-fn boards_json() {
-    let mut runtime = Runtime::new().unwrap();
-    let https = HttpsConnector::new(1).unwrap();
+fn boards_json() -> Result<(), Error> {
+    let mut runtime = Runtime::new()?;
+    let https = HttpsConnector::new(1)?;
     let client = Client::builder().build::<_, Body>(https);
 
-    let uri = format!("{}/boards.json", API_URI_PREFIX).parse().unwrap();
+    let uri = format!("{}/boards.json", API_URI_PREFIX).parse()?;
 
     let boards: Result<Vec<Board>, Error> = runtime.block_on(
         client
@@ -42,7 +42,7 @@ fn boards_json() {
     );
     runtime.shutdown_now().wait().unwrap();
 
-    for Board { board, is_archived } in boards.unwrap() {
+    for Board { board, is_archived } in boards? {
         assert_eq!(
             board.is_archived(),
             is_archived,
@@ -51,4 +51,5 @@ fn boards_json() {
             is_archived,
         );
     }
+    Ok(())
 }
