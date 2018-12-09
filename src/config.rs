@@ -1,16 +1,17 @@
 //! Configuration file parsing.
 
-use std::fs::{self, File};
-use std::io::prelude::*;
-use std::io::BufReader;
-use std::path::PathBuf;
-use std::time::Duration;
+use std::{
+    fs::{self, File},
+    io::{prelude::*, BufReader},
+    path::PathBuf,
+    time::Duration,
+};
 
-use failure::ResultExt;
-use serde::de::Error;
-use serde::{Deserialize, Deserializer};
+use failure::{Fail, ResultExt};
+use serde::{de::Error, Deserialize, Deserializer};
+use serde_derive::Deserialize;
 
-use four_chan::Board;
+use crate::four_chan::Board;
 
 #[derive(Deserialize)]
 pub struct Config {

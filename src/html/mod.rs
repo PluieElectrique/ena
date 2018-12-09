@@ -4,12 +4,13 @@
 
 use std::borrow::Cow;
 
+use lazy_static::lazy_static;
 use log::Level;
-use pest::iterators::Pairs;
-use pest::Parser;
+use pest::{iterators::Pairs, Parser};
+use pest_derive::Parser;
 use regex::Regex;
 
-use four_chan::Board;
+use crate::four_chan::Board;
 
 mod tests;
 

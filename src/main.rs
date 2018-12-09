@@ -1,17 +1,10 @@
-extern crate actix;
-extern crate ena;
-extern crate env_logger;
-extern crate failure;
-#[macro_use]
-extern crate log;
-
 use std::io::Write;
 use std::process;
 
-use actix::prelude::*;
-use ena::actors::*;
-use ena::config::parse_config;
-use ena::log_error;
+use ::actix::prelude::*;
+use log::{error, info};
+
+use ena::{actors::*, config::parse_config, log_error};
 
 const THREAD_UPDATER_MAILBOX_CAPACITY: usize = 500;
 

@@ -1,28 +1,24 @@
-use std::collections::HashMap;
-use std::path::PathBuf;
-use std::sync::Arc;
-use std::time::Duration;
+use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
 
-use actix::dev::ResponseChannel;
-use actix::prelude::*;
-use chrono;
+use ::actix::{dev::ResponseChannel, prelude::*};
 use chrono::prelude::*;
 use failure::{Error, ResultExt};
-use futures::future::{self, Either};
-use futures::prelude::*;
-use futures::stream;
-use futures::sync::mpsc::{self, Sender};
-use hyper::client::{Client, HttpConnector};
-use hyper::header::{self, HeaderValue};
-use hyper::{self, Body, Request, StatusCode, Uri};
+use futures::{
+    future::{self, Either},
+    prelude::*,
+    stream,
+    sync::mpsc::{self, Sender},
+};
+use hyper::{
+    client::HttpConnector,
+    header::{self, HeaderValue},
+    Body, Client, Request, StatusCode, Uri,
+};
 use hyper_tls::HttpsConnector;
-use serde_json;
-use tokio;
 use tokio::runtime::Runtime;
 
-use actors::thread_updater::{FetchedThread, ThreadUpdater};
-use config::Config;
-use four_chan::*;
+use super::thread_updater::{FetchedThread, ThreadUpdater};
+use crate::{config::Config, four_chan::*};
 
 mod error;
 mod helper;
@@ -30,12 +26,12 @@ mod messages;
 mod rate_limiter;
 mod retry;
 
-pub use self::error::FetchError;
-pub use self::messages::*;
-
-use self::helper::*;
-use self::rate_limiter::StreamExt;
-use self::retry::{Retry, RetryQueue};
+pub use self::{error::FetchError, messages::*};
+use self::{
+    helper::*,
+    rate_limiter::StreamExt,
+    retry::{Retry, RetryQueue},
+};
 
 type HttpsClient = Client<HttpsConnector<HttpConnector>>;
 

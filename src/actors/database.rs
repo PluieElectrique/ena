@@ -1,15 +1,15 @@
-use actix::prelude::*;
+use ::actix::prelude::*;
 use chrono::prelude::*;
 use chrono_tz::America;
-use futures::future;
-use futures::prelude::*;
-use my::prelude::*;
-use my::{self, Pool, Value};
+use futures::{future, prelude::*};
+use my::{params, prelude::*, Pool, Value};
 use tokio::runtime::Runtime;
 
-use config::Config;
-use four_chan::{Board, OpData, Post};
-use html;
+use crate::{
+    config::Config,
+    four_chan::{Board, OpData, Post},
+    html,
+};
 
 const DATABASE_MAILBOX_CAPACITY: usize = 1000;
 

@@ -1,18 +1,20 @@
-use std::collections::HashMap;
-use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::{
+    collections::HashMap,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
-use actix::fut;
-use actix::prelude::*;
+use ::actix::{fut, prelude::*};
 use chrono::prelude::*;
 use futures::prelude::*;
 use log::Level;
 use tokio::timer::Delay;
 
-use super::fetcher::*;
-use super::ThreadUpdater;
-use config::Config;
-use four_chan::{Board, Thread};
+use super::{fetcher::*, ThreadUpdater};
+use crate::{
+    config::Config,
+    four_chan::{Board, Thread},
+};
 
 #[derive(Message)]
 pub struct ArchiveUpdate(pub Board, pub Vec<u64>);

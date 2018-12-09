@@ -1,10 +1,9 @@
 use std::time::Duration;
 
-use futures::prelude::*;
-use futures::stream::Fuse;
+use futures::{prelude::*, stream::Fuse};
 use tokio::timer::DelayQueue;
 
-use config::RetryBackoffConfig;
+use crate::config::RetryBackoffConfig;
 
 /// A struct which represents a request that can be retried
 pub struct Retry<T> {

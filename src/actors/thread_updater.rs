@@ -1,19 +1,19 @@
-use std::collections::HashMap;
-use std::hash::Hasher;
-use std::sync::Arc;
+use std::{collections::HashMap, hash::Hasher, sync::Arc};
 
-use actix::prelude::*;
+use ::actix::prelude::*;
 use chrono::prelude::*;
-use futures::future::{self, Either};
-use futures::prelude::*;
+use futures::{
+    future::{self, Either},
+    prelude::*,
+};
 use log::Level;
 use twox_hash::XxHash;
 
-use super::board_poller::*;
-use super::database::*;
-use super::fetcher::*;
-use config::Config;
-use four_chan::{self, Board, OpData, Post};
+use super::{board_poller::*, database::*, fetcher::*};
+use crate::{
+    config::Config,
+    four_chan::{Board, OpData, Post},
+};
 
 /// An actor which updates threads when it receives change notifications from
 /// [`BoardPoller`](struct.BoardPoller.html).
@@ -323,7 +323,7 @@ struct ThreadMetadata {
 }
 
 impl ThreadMetadata {
-    fn from_thread(thread: &[four_chan::Post]) -> Self {
+    fn from_thread(thread: &[Post]) -> Self {
         Self {
             op_data: thread[0].op_data.clone(),
             posts: thread.iter().map(PostMetadata::from).collect(),

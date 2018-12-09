@@ -1,13 +1,10 @@
 #![cfg(test)]
 
-use std::str;
-
 use failure::Error;
 use futures::prelude::*;
-use hyper::client::Client;
-use hyper::Body;
+use hyper::{Body, Client};
 use hyper_tls::HttpsConnector;
-use serde_json;
+use serde_derive::Deserialize;
 use tokio::runtime::Runtime;
 
 use super::{num_to_bool, API_URI_PREFIX};

@@ -1,9 +1,8 @@
-use actix::dev::MessageResponse;
-use actix::prelude::*;
+use ::actix::{dev::MessageResponse, prelude::*};
 use futures::sync::mpsc::Sender;
 
 use super::*;
-use four_chan::Board;
+use crate::four_chan::Board;
 
 pub trait ToUri {
     fn to_uri(&self) -> Uri;

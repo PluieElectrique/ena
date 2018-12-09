@@ -1,9 +1,4 @@
-use std;
-
-use actix;
-use hyper;
-use serde_json;
-use tokio;
+use failure::Fail;
 
 #[derive(Debug, Fail)]
 pub enum FetchError {

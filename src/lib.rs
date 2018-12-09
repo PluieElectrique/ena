@@ -1,31 +1,9 @@
 //! A 4chan scraper. Currently designed to be a (mostly) compatible, improved replacement for Asagi.
 
-extern crate actix;
-extern crate chrono;
-extern crate chrono_tz;
-#[macro_use]
-extern crate failure;
-#[macro_use]
-extern crate futures;
-extern crate hyper;
-extern crate hyper_tls;
-#[macro_use]
-extern crate lazy_static;
+// The logging macros are basic enough that we shouldn't have to import them whenever we want to use
+// them. So, we make them globally available.
 #[macro_use]
 extern crate log;
-#[macro_use]
-extern crate mysql_async as my;
-extern crate pest;
-#[macro_use]
-extern crate pest_derive;
-extern crate regex;
-extern crate serde;
-#[macro_use]
-extern crate serde_derive;
-extern crate serde_json;
-extern crate tokio;
-extern crate toml;
-extern crate twox_hash;
 
 macro_rules! zero_format {
     ($str:expr, $expr:expr) => {{
