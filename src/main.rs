@@ -30,7 +30,8 @@ fn main() {
                 level_style.value(level),
                 args
             )
-        }).init();
+        })
+        .init();
 
     info!("Ena is starting");
 

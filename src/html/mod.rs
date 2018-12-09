@@ -85,7 +85,8 @@ pub fn clean(input: String, context: Option<(Board, u64)>) -> String {
             let mut serialized = String::new();
             serialize(&mut serialized, parse);
             Cow::Owned(serialized)
-        }).unwrap_or_else(|err| {
+        })
+        .unwrap_or_else(|err| {
             error!(
                 "{}Failed to parse HTML: {:?}",
                 context.map_or(String::new(), |context| format!(

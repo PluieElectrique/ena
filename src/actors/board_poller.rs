@@ -253,7 +253,8 @@ impl BoardPoller {
                         }
                     }
                     Err(err) => error!("/{}/: Failed to fetch archive: {}", board, err),
-                }).map_err(move |err, _act, _ctx| {
+                })
+                .map_err(move |err, _act, _ctx| {
                     error!("/{}/: Failed to fetch archive: {:?}", board, err)
                 }),
         );

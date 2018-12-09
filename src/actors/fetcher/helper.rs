@@ -51,7 +51,8 @@ where
                         tx.send(res);
                     }
                     Ok(())
-                }))).map(|_| ())
+                })))
+                .map(|_| ())
                 .map_err(|err| error!("Failed to send RateLimitedResponse future: {}", err)),
         )
     }

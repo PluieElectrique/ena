@@ -97,11 +97,13 @@ where
         match self.queue.poll() {
             Ok(Async::Ready(Some(value))) => Ok(Async::Ready(Some(value.into_inner()))),
             Ok(Async::NotReady) => Ok(Async::NotReady),
-            Ok(Async::Ready(None)) => if stream_done {
-                Ok(Async::Ready(None))
-            } else {
-                Ok(Async::NotReady)
-            },
+            Ok(Async::Ready(None)) => {
+                if stream_done {
+                    Ok(Async::Ready(None))
+                } else {
+                    Ok(Async::NotReady)
+                }
+            }
             Err(err) => {
                 // There's not much we can do here. If the timer has shutdown, something has really
                 // gone wrong. If the timer is at capacity, something has also gone wrong, and we

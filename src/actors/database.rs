@@ -164,9 +164,11 @@ impl Handler<GetUnarchivedThreads> for Database {
                 .get_conn()
                 .and_then(|conn| {
                     conn.drop_query("CREATE TEMPORARY TABLE archive_threads (id int unsigned);")
-                }).and_then(|conn| {
+                })
+                .and_then(|conn| {
                     conn.batch_exec("INSERT INTO archive_threads SET id = :id;", params)
-                }).and_then(|conn| conn.drop_query(thread_query))
+                })
+                .and_then(|conn| conn.drop_query(thread_query))
                 .and_then(|conn| conn.query("SELECT id FROM archive_threads;"))
                 .and_then(|result| result.collect_and_drop())
                 .and_then(|(conn, nums)| {
@@ -303,7 +305,8 @@ impl Handler<InsertPosts> for Database {
                                 thread_num,
                             },
                         )
-                    }).and_then(move |(conn, next_num): (_, Option<(u64,)>)| {
+                    })
+                    .and_then(move |(conn, next_num): (_, Option<(u64,)>)| {
                         conn.batch_exec(insert_query, params).and_then(move |conn| {
                             conn.prep_exec(
                                 new_media_query,
@@ -314,7 +317,8 @@ impl Handler<InsertPosts> for Database {
                                 },
                             )
                         })
-                    }).and_then(move |results| {
+                    })
+                    .and_then(move |results| {
                         results.reduce_and_drop(vec![], move |mut files: Vec<String>, row| {
                             let (media, preview) = my::from_row(row);
                             if download_media {
@@ -329,7 +333,8 @@ impl Handler<InsertPosts> for Database {
                             }
                             files
                         })
-                    }).map(|(_conn, files)| files),
+                    })
+                    .map(|(_conn, files)| files),
             )
         }
     }

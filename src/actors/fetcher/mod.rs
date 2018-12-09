@@ -112,20 +112,22 @@ impl Fetcher {
             let future = receiver
                 .map(|FetchMedia(board, filenames)| {
                     stream::iter_ok(filenames.into_iter().map(move |filename| (board, filename)))
-                }).flatten()
+                })
+                .flatten()
                 .map(move |request| Retry::new(request, &retry_backoff))
                 .select(RetryQueue::new(retry_receiver))
                 .map(move |retry| {
                     let retry_sender = retry_sender.clone();
                     fetch_media(retry.to_data(), &client, media_path.clone()).or_else(move |err| {
                         use self::FetchError::*;
-                        let will_retry = retry.can_retry() && match err {
-                            ExistingMedia | NotFound(_) => false,
-                            EmptyThread | InvalidReplyTo | JsonError(_) | NotModified => {
-                                unreachable!()
-                            }
-                            _ => true,
-                        };
+                        let will_retry = retry.can_retry()
+                            && match err {
+                                ExistingMedia | NotFound(_) => false,
+                                EmptyThread | InvalidReplyTo | JsonError(_) | NotModified => {
+                                    unreachable!()
+                                }
+                                _ => true,
+                            };
 
                         // TODO: Remove scope when NLL stabilizes
                         {
@@ -150,7 +152,8 @@ impl Fetcher {
                             Either::B(future::ok(()))
                         }
                     })
-                }).rate_limit(&config.network.rate_limiting.media)
+                })
+                .rate_limit(&config.network.rate_limiting.media)
                 .consume();
             runtime.spawn(future);
             sender
@@ -171,7 +174,8 @@ impl Fetcher {
                             (FetchThread(board, no, from_archive_json), last_modified)
                         },
                     )
-                }).flatten()
+                })
+                .flatten()
                 .map(move |request| Retry::new(request, &retry_backoff))
                 .select(RetryQueue::new(retry_receiver))
                 .map(move |retry| {
@@ -182,7 +186,8 @@ impl Fetcher {
                         thread_updater.clone(),
                         retry_sender.clone(),
                     )
-                }).rate_limit(&config.network.rate_limiting.thread)
+                })
+                .rate_limit(&config.network.rate_limiting.thread)
                 .consume();
             Arbiter::spawn(future);
             sender
@@ -258,7 +263,8 @@ where
                                 error!("Could not parse Last-Modified header: {}", err);
                                 Utc::now()
                             })
-                    }).unwrap_or_else(Utc::now);
+                    })
+                    .unwrap_or_else(Utc::now);
 
                 if last_modified > new_modified {
                     warn!(
@@ -272,7 +278,8 @@ where
                 }
             }
             _ => Err(res.status().into()),
-        }).and_then(move |(res, last_modified)| {
+        })
+        .and_then(move |(res, last_modified)| {
             fetcher
                 .send(UpdateLastModified(key, last_modified))
                 .from_err()
@@ -308,14 +315,16 @@ fn fetch_thread(
             } else {
                 Ok((posts, last_modified))
             }
-        }).then(move |result| {
+        })
+        .then(move |result| {
             use self::FetchError::*;
             if let Err(ref err) = result {
-                let will_retry = retry.can_retry() && match err {
-                    NotFound(_) | NotModified => false,
-                    ExistingMedia => unreachable!(),
-                    _ => true,
-                };
+                let will_retry = retry.can_retry()
+                    && match err {
+                        NotFound(_) | NotModified => false,
+                        ExistingMedia => unreachable!(),
+                        _ => true,
+                    };
 
                 // TODO: Remove scope when NLL stabilizes
                 {
@@ -381,7 +390,8 @@ fn fetch_archive(
             .and_then(move |res| match res.status() {
                 StatusCode::OK => Ok(res),
                 _ => Err(res.status().into()),
-            }).and_then(|res| res.into_body().concat2().from_err())
+            })
+            .and_then(|res| res.into_body().concat2().from_err())
             .and_then(move |body| {
                 let archive: Vec<u64> = serde_json::from_slice(&body)?;
                 Ok(archive)
@@ -431,17 +441,20 @@ fn fetch_media(
         .join3(
             temp_dir_future.and_then(|_| temp_file_future).from_err(),
             real_dir_future.from_err(),
-        ).and_then(move |(res, file, _)| match res.status() {
+        )
+        .and_then(move |(res, file, _)| match res.status() {
             StatusCode::OK => Ok((res, file)),
             StatusCode::NOT_FOUND => Err(FetchError::NotFound(uri.to_string())),
             _ => Err(res.status().into()),
-        }).and_then(|(res, file)| {
+        })
+        .and_then(|(res, file)| {
             res.into_body().from_err().fold(file, |file, chunk| {
                 tokio::io::write_all(file, chunk)
                     .from_err::<FetchError>()
                     .map(|(file, _)| file)
             })
-        }).and_then({
+        })
+        .and_then({
             let filename = filename.clone();
             move |_| {
                 debug!(
