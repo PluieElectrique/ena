@@ -113,38 +113,7 @@ impl Fetcher {
                 .map(move |request| Retry::new(request, &retry_backoff))
                 .select(RetryQueue::new(retry_receiver))
                 .map(move |retry| {
-                    let retry_sender = retry_sender.clone();
-                    fetch_media(retry.to_data(), &client, media_path.clone()).or_else(move |err| {
-                        use self::FetchError::*;
-                        let will_retry = retry.can_retry()
-                            && match err {
-                                ExistingMedia | NotFound(_) => false,
-                                EmptyThread | InvalidReplyTo | JsonError(_) | NotModified => {
-                                    unreachable!()
-                                }
-                                _ => true,
-                            };
-
-                        let &(board, ref filename) = retry.as_data();
-                        error!(
-                            "/{}/: Failed to fetch media {}, {}retrying: {}",
-                            board,
-                            filename,
-                            if will_retry { "" } else { "not " },
-                            err
-                        );
-
-                        if will_retry {
-                            Either::A(
-                                retry_sender
-                                    .send(retry)
-                                    .map(|_| ())
-                                    .map_err(|err| error!("{}", err)),
-                            )
-                        } else {
-                            Either::B(future::ok(()))
-                        }
-                    })
+                    fetch_media_retry(retry, &client, media_path.clone(), retry_sender.clone())
                 })
                 .rate_limit(&config.network.rate_limiting.media)
                 .consume();
@@ -454,4 +423,41 @@ fn fetch_media(
             }
         });
     Either::B(future)
+}
+
+fn fetch_media_retry(
+    retry: Retry<(Board, String)>,
+    client: &Arc<HttpsClient>,
+    media_path: PathBuf,
+    retry_sender: Sender<Retry<(Board, String)>>,
+) -> impl Future<Item = (), Error = ()> {
+    fetch_media(retry.to_data(), client, media_path).or_else(move |err| {
+        use self::FetchError::*;
+        let will_retry = retry.can_retry()
+            && match err {
+                ExistingMedia | NotFound(_) => false,
+                EmptyThread | InvalidReplyTo | JsonError(_) | NotModified => unreachable!(),
+                _ => true,
+            };
+
+        let &(board, ref filename) = retry.as_data();
+        error!(
+            "/{}/: Failed to fetch media {}, {}retrying: {}",
+            board,
+            filename,
+            if will_retry { "" } else { "not " },
+            err
+        );
+
+        if will_retry {
+            Either::A(
+                retry_sender
+                    .send(retry)
+                    .map(|_| ())
+                    .map_err(|err| error!("{}", err)),
+            )
+        } else {
+            Either::B(future::ok(()))
+        }
+    })
 }
