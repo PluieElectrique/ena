@@ -141,7 +141,7 @@ impl Fetcher {
                 .map(move |request| Retry::new(request, &retry_backoff))
                 .select(RetryQueue::new(retry_receiver))
                 .map(move |retry| {
-                    fetch_thread(
+                    fetch_thread_retry(
                         retry,
                         &client,
                         fetcher.clone(),
@@ -247,6 +247,7 @@ where
         })
 }
 
+#[derive(Clone, Copy)]
 pub struct FetchThread(pub Board, pub u64, pub bool);
 
 impl ToUri for &FetchThread {
@@ -258,14 +259,12 @@ impl ToUri for &FetchThread {
 }
 
 fn fetch_thread(
-    retry: Retry<(FetchThread, DateTime<Utc>)>,
+    request: (FetchThread, DateTime<Utc>),
     client: &Arc<HttpsClient>,
     fetcher: Addr<Fetcher>,
-    thread_updater: Addr<ThreadUpdater>,
-    retry_sender: Sender<Retry<(FetchThread, DateTime<Utc>)>>,
-) -> impl Future<Item = (), Error = ()> {
-    fetch_with_last_modified(&retry.as_data().0, retry.as_data().1, client, fetcher)
-        .and_then(move |(body, last_modified)| {
+) -> impl Future<Item = (Vec<Post>, DateTime<Utc>), Error = FetchError> {
+    fetch_with_last_modified(&request.0, request.1, client, fetcher).and_then(
+        move |(body, last_modified)| {
             let PostsWrapper { posts } = serde_json::from_slice(&body)?;
             if posts.is_empty() {
                 Err(FetchError::EmptyThread)
@@ -274,41 +273,51 @@ fn fetch_thread(
             } else {
                 Ok((posts, last_modified))
             }
-        })
-        .then(move |result| {
-            use self::FetchError::*;
-            if let Err(ref err) = result {
-                let will_retry = retry.can_retry()
-                    && match err {
-                        NotFound(_) | NotModified => false,
-                        ExistingMedia => unreachable!(),
-                        _ => true,
-                    };
+        },
+    )
+}
 
-                let &(FetchThread(board, no, _), _) = retry.as_data();
-                error!(
-                    "/{}/ No. {}: Failed to fetch, {}retrying: {}",
-                    board,
-                    no,
-                    if will_retry { "" } else { "not " },
-                    err
+fn fetch_thread_retry(
+    retry: Retry<(FetchThread, DateTime<Utc>)>,
+    client: &Arc<HttpsClient>,
+    fetcher: Addr<Fetcher>,
+    thread_updater: Addr<ThreadUpdater>,
+    retry_sender: Sender<Retry<(FetchThread, DateTime<Utc>)>>,
+) -> impl Future<Item = (), Error = ()> {
+    fetch_thread(retry.to_data(), client, fetcher).then(move |result| {
+        use self::FetchError::*;
+        if let Err(ref err) = result {
+            let will_retry = retry.can_retry()
+                && match err {
+                    NotFound(_) | NotModified => false,
+                    ExistingMedia => unreachable!(),
+                    _ => true,
+                };
+
+            let &(FetchThread(board, no, _), _) = retry.as_data();
+            error!(
+                "/{}/ No. {}: Failed to fetch, {}retrying: {}",
+                board,
+                no,
+                if will_retry { "" } else { "not " },
+                err
+            );
+
+            if will_retry {
+                return Either::A(
+                    retry_sender
+                        .send(retry)
+                        .map(|_| ())
+                        .map_err(|err| error!("{}", err)),
                 );
-
-                if will_retry {
-                    return Either::A(
-                        retry_sender
-                            .send(retry)
-                            .map(|_| ())
-                            .map_err(|err| error!("{}", err)),
-                    );
-                }
             }
-            let reply = FetchedThread {
-                request: retry.into_data().0,
-                result,
-            };
-            Either::B(thread_updater.send(reply).map_err(|err| log_error!(&err)))
-        })
+        }
+        let reply = FetchedThread {
+            request: retry.into_data().0,
+            result,
+        };
+        Either::B(thread_updater.send(reply).map_err(|err| log_error!(&err)))
+    })
 }
 
 fn fetch_thread_list(
