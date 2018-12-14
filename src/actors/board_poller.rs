@@ -80,41 +80,45 @@ impl BoardPoller {
         use self::ThreadUpdate::*;
         let mut updates = vec![];
 
-        let push_removed: Box<dyn Fn(&Thread, &mut Vec<_>)> = if curr_threads.is_empty() {
-            // If the board is completely empty, all threads must have been deleted
-            Box::new(|thread, updates| {
-                updates.push(Deleted(thread.no));
-            })
-        } else {
-            let last_thread = &curr_threads[curr_threads.len() - 1];
-            let anchor_index = self.threads[&board]
-                .iter()
-                .rev()
-                .find(|thread| thread.no == last_thread.no)
-                // If a board is fast and our poll interval is long, a bumped thread might have
-                // enough time to fall to the bottom of the board. This could cause bumped-off
-                // threads to be marked as deleted. So, we check that last_modified hasn't changed.
-                // Sage posts will also trigger this check, but that's okay, because we'd rather
-                // reject good anchors than accept incorrect ones.
-                .filter(|thread| thread.last_modified == last_thread.last_modified)
-                .map(|thread| thread.bump_index);
+        let push_removed = {
+            let anchor_index = curr_threads.last().map(|last_thread| {
+                self.threads[&board]
+                    .iter()
+                    .rev()
+                    .find(|thread| thread.no == last_thread.no)
+                    // If a board is fast and our poll interval is long, it might be possible for a
+                    // thread to be bumped and then fall to the bottom of the board in one interval.
+                    // This would break the heuristic and could cause bumped-off threads to be
+                    // marked as deleted. So, we check last_modified to ensure that this thread
+                    // hasn't been bumped. Note that this check will also reject saged threads,
+                    // which are valid anchors. That's okay, though, because we would rather reject
+                    // some valid anchors than accept invalid ones.
+                    .filter(|thread| thread.last_modified == last_thread.last_modified)
+                    .map(|thread| thread.bump_index)
+            });
 
-            Box::new(move |thread, updates| {
+            move |thread: &Thread, updates: &mut Vec<ThreadUpdate>| {
                 match anchor_index {
-                    Some(anchor) => {
+                    Some(Some(anchor)) => {
+                        // We found an anchor and will use it to determine if a thread has been
+                        // deleted or bumped off.
                         if thread.bump_index < anchor {
                             updates.push(Deleted(thread.no));
                         } else {
                             updates.push(BumpedOff(thread.no));
                         }
                     }
-                    None => {
-                        // If all of the threads have changed, we have no information and can't
-                        // assume that any thread was deleted
+                    Some(None) => {
+                        // The board isn't empty, but we didn't find a valid anchor. Without enough
+                        // information, we assume all removed threads were bumped off.
                         updates.push(BumpedOff(thread.no));
                     }
+                    None => {
+                        // The board is empty, so all threads must have been deleted.
+                        updates.push(Deleted(thread.no));
+                    }
                 }
-            })
+            }
         };
 
         // Sort ascending by no
