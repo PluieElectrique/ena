@@ -1,3 +1,5 @@
+use std::{collections::HashMap, sync::Arc};
+
 use ::actix::prelude::*;
 use chrono::prelude::*;
 use chrono_tz::America;
@@ -6,7 +8,7 @@ use mysql_async::{errors::Error, params, prelude::*, Opts, Pool, Value};
 use tokio::runtime::Runtime;
 
 use crate::{
-    config::Config,
+    config::{Config, ScrapingConfig},
     four_chan::{Board, OpData, Post},
     html,
 };
@@ -88,10 +90,9 @@ WHERE num = :num AND subnum = 0";
 
 /// An actor which provides an interface to the MySQL database.
 pub struct Database {
+    boards: Arc<HashMap<Board, ScrapingConfig>>,
     pool: Pool,
     adjust_timestamps: bool,
-    download_media: bool,
-    download_thumbs: bool,
 }
 
 impl Database {
@@ -109,7 +110,7 @@ impl Database {
         }
 
         runtime.block_on({
-            let boards = config.scraping.boards.clone();
+            let boards: Vec<Board> = config.boards.keys().cloned().collect();
             let pool = pool.clone();
             let board_sql = BOARD_SQL.replace(CHARSET_REPLACE, &config.database_media.charset);
             future::join_all(boards.into_iter().map(move |board| {
@@ -126,10 +127,9 @@ impl Database {
         runtime.shutdown_on_idle().wait().unwrap();
 
         Ok(Self {
+            boards: config.boards.clone(),
             pool,
             adjust_timestamps: config.asagi_compat.adjust_timestamps,
-            download_media: config.scraping.download_media,
-            download_thumbs: config.scraping.download_thumbs,
         })
     }
 }
@@ -279,7 +279,9 @@ impl Handler<InsertPosts> for Database {
 
         let insert_query = INSERT_QUERY.replace(BOARD_REPLACE, &msg.0.to_string());
 
-        if !self.download_media && !self.download_thumbs {
+        let download_media = self.boards[&board].download_media;
+        let download_thumbs = self.boards[&board].download_thumbs;
+        if !download_media && !download_thumbs {
             Box::new(
                 self.pool
                     .get_conn()
@@ -291,8 +293,6 @@ impl Handler<InsertPosts> for Database {
             let new_media_query = NEW_MEDIA_QUERY.replace(BOARD_REPLACE, &msg.0.to_string());
 
             let thread_num = msg.1;
-            let download_media = self.download_media;
-            let download_thumbs = self.download_thumbs;
             Box::new(
                 self.pool
                     .get_conn()

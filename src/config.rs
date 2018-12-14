@@ -1,21 +1,25 @@
 //! Configuration file parsing.
 
 use std::{
+    collections::HashMap,
     fs::{self, File},
     io::{prelude::*, BufReader},
     path::PathBuf,
+    sync::Arc,
     time::Duration,
 };
 
 use failure::{Fail, ResultExt};
 use serde::{de::Error, Deserialize, Deserializer};
 use serde_derive::Deserialize;
+use toml::Value;
 
 use crate::four_chan::Board;
 
 #[derive(Deserialize)]
 pub struct Config {
-    pub scraping: ScrapingConfig,
+    #[serde(skip_deserializing)]
+    pub boards: Arc<HashMap<Board, ScrapingConfig>>,
     pub network: NetworkConfig,
     pub database_media: DatabaseMediaConfig,
     pub asagi_compat: AsagiCompatibilityConfig,
@@ -23,12 +27,39 @@ pub struct Config {
 
 #[derive(Deserialize)]
 pub struct ScrapingConfig {
-    pub boards: Vec<Board>,
     #[serde(deserialize_with = "nonzero_duration_from_secs")]
     pub poll_interval: Duration,
     pub fetch_archive: bool,
     pub download_media: bool,
     pub download_thumbs: bool,
+}
+
+impl ScrapingConfig {
+    fn merge(&self, board: &OptionScrapingConfig) -> Self {
+        Self {
+            poll_interval: board.poll_interval.unwrap_or(self.poll_interval),
+            fetch_archive: board.fetch_archive.unwrap_or(self.fetch_archive),
+            download_media: board.download_media.unwrap_or(self.download_media),
+            download_thumbs: board.download_thumbs.unwrap_or(self.download_thumbs),
+        }
+    }
+}
+
+/// Used to extract the global and board scraping configs for merging and insertion into Config.
+#[derive(Deserialize)]
+struct BoardsConfig {
+    scraping: ScrapingConfig,
+    boards: HashMap<String, OptionScrapingConfig>,
+}
+
+#[derive(Deserialize)]
+pub struct OptionScrapingConfig {
+    #[serde(default)]
+    #[serde(deserialize_with = "option_nonzero_duration_from_secs")]
+    pub poll_interval: Option<Duration>,
+    pub fetch_archive: Option<bool>,
+    pub download_media: Option<bool>,
+    pub download_thumbs: Option<bool>,
 }
 
 #[derive(Deserialize)]
@@ -88,7 +119,7 @@ pub struct AsagiCompatibilityConfig {
 /// errors which don't work well with Serde's custom error message format.
 #[derive(Debug, Fail)]
 pub enum ConfigError {
-    #[fail(display = "Invalid config: `scraping.boards` must contain at least one board")]
+    #[fail(display = "Invalid config: `boards` must contain at least one board")]
     NoBoards,
 
     #[fail(display = "Invalid config: `network.retry_backoff.factor` must be at least 2")]
@@ -104,11 +135,11 @@ pub fn parse_config() -> Result<Config, failure::Error> {
         .read_to_string(&mut contents)
         .context("Could not read ena.toml")?;
 
+    let boards_config: BoardsConfig =
+        toml::from_str(&contents).context("Could not parse ena.toml")?;
     let mut config: Config = toml::from_str(&contents).context("Could not parse ena.toml")?;
-    config.scraping.boards.sort();
-    config.scraping.boards.dedup();
 
-    if config.scraping.boards.is_empty() {
+    if boards_config.boards.is_empty() {
         return Err(ConfigError::NoBoards.into());
     } else if config.network.retry_backoff.factor < 2 {
         return Err(ConfigError::SmallRetryFactor.into());
@@ -121,7 +152,26 @@ pub fn parse_config() -> Result<Config, failure::Error> {
     File::create(&test_file).context("Could not create test file in media directory")?;
     fs::remove_file(&test_file).context("Could not remove media directory permission test file")?;
 
-    if config.scraping.poll_interval.as_secs() < 10 {
+    let boards = Arc::get_mut(&mut config.boards).unwrap();
+    for (board, mut config) in boards_config.boards.into_iter() {
+        let board: Board =
+            Value::try_into(Value::String(board)).context("Could not parse `boards`")?;
+        if !board.is_archived() && config.fetch_archive.unwrap_or(false) {
+            warn!(
+                "/{}/ is not an archived board, ignoring `fetch_archive = true`",
+                board
+            );
+            config.fetch_archive = Some(false);
+        }
+        boards.insert(board, boards_config.scraping.merge(&config));
+    }
+    boards.shrink_to_fit();
+
+    if config
+        .boards
+        .values()
+        .any(|config| config.poll_interval.as_secs() < 10)
+    {
         warn!("4chan API rules recommend a minimum `poll_interval` of 10 seconds");
         warn!("A very short `poll_interval` may cause the API to return old data");
     }
@@ -187,6 +237,14 @@ deserialize_validate!(
     u64 => Duration,
     |&secs| secs != 0,
     |secs| Duration::from_secs(secs),
+    "interval must be at least 1 second",
+);
+
+deserialize_validate!(
+    option_nonzero_duration_from_secs,
+    Option<u64> => Option<Duration>,
+    |secs: &Option<u64>| secs.map_or(true, |s| s != 0),
+    |secs: Option<u64>| secs.map(Duration::from_secs),
     "interval must be at least 1 second",
 );
 

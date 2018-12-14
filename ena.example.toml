@@ -1,7 +1,5 @@
+# Global scraping settings
 [scraping]
-
-# Boards to scrape
-boards = [""]
 
 # Seconds to wait between fetching the threads.json of each board
 poll_interval = 60
@@ -12,6 +10,21 @@ fetch_archive = true
 # Download full image/media files and/or thumbnails
 download_media = true
 download_thumbs = true
+
+
+# Boards to scrape and individual scraping settings
+[boards]
+
+# Scrape a board with global settings
+# board = {}
+
+# Scrape a board with a poll interval of 5 minutes
+# board = { poll_interval = 300 }
+
+# Scrape a board, but don't download full images or archived threads
+# [boards.board]
+# fetch_archive = false
+# download_media = false
 
 
 [network.rate_limiting]

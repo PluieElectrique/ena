@@ -12,7 +12,7 @@ use tokio::timer::Delay;
 
 use super::{fetcher::*, ThreadUpdater};
 use crate::{
-    config::Config,
+    config::{Config, ScrapingConfig},
     four_chan::{Board, Thread},
 };
 
@@ -32,10 +32,8 @@ pub enum ThreadUpdate {
 /// An actor which watches a board's threads and sends updates to
 /// [`ThreadUpdater`](struct.ThreadUpdater.html).
 pub struct BoardPoller {
-    boards: Vec<Board>,
+    boards: Arc<HashMap<Board, ScrapingConfig>>,
     threads: HashMap<Board, Vec<Thread>>,
-    interval: Duration,
-    fetch_archive: bool,
     thread_updater: Arc<Addr<ThreadUpdater>>,
     fetcher: Addr<Fetcher>,
 }
@@ -44,8 +42,8 @@ impl Actor for BoardPoller {
     type Context = Context<Self>;
 
     fn started(&mut self, ctx: &mut Context<Self>) {
-        for &board in &self.boards {
-            if self.fetch_archive && board.is_archived() {
+        for (&board, config) in self.boards.iter() {
+            if config.fetch_archive && board.is_archived() {
                 self.poll_archive(board, ctx);
             }
             self.poll(board, ctx);
@@ -59,18 +57,15 @@ impl BoardPoller {
         thread_updater: Addr<ThreadUpdater>,
         fetcher: Addr<Fetcher>,
     ) -> Self {
-        let boards = config.scraping.boards.clone();
         let mut threads = HashMap::new();
-        for &board in &boards {
+        for &board in config.boards.keys() {
             threads.insert(board, vec![]);
         }
         threads.shrink_to_fit();
 
         Self {
-            boards,
+            boards: config.boards.clone(),
             threads,
-            interval: config.scraping.poll_interval,
-            fetch_archive: config.scraping.fetch_archive,
             thread_updater: Arc::new(thread_updater),
             fetcher,
         }
@@ -207,7 +202,7 @@ impl BoardPoller {
                 .send(FetchThreadList(board))
                 .map_err(|err| log_error!(&err))
                 .into_actor(self)
-                .timeout(self.interval, ())
+                .timeout(self.boards[&board].poll_interval, ())
                 .then(move |res, act, ctx| {
                     if let Ok(res) = res {
                         match res {
@@ -220,7 +215,7 @@ impl BoardPoller {
                             },
                         }
                     }
-                    ctx.run_later(act.interval, move |act, ctx| {
+                    ctx.run_later(act.boards[&board].poll_interval, move |act, ctx| {
                         act.poll(board, ctx);
                     });
                     fut::ok(())
