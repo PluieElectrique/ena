@@ -36,7 +36,7 @@ fn main() {
     let sys = System::new("ena");
 
     let database = {
-        let database = Database::new(&config).unwrap_or_else(|err| {
+        let database = Database::try_new(&config).unwrap_or_else(|err| {
             error!("Database initialization error: {}", err);
             process::exit(1);
         });

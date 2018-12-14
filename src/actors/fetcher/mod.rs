@@ -83,12 +83,11 @@ impl Fetcher {
             let (_, receiver) = actix::dev::channel::channel(FETCHER_MAILBOX_CAPACITY);
             Context::with_receiver(receiver)
         };
-        let fetcher = Fetcher::new(config, thread_updater, ctx.address())?;
+        let fetcher = Fetcher::try_new(config, thread_updater, ctx.address())?;
         Ok(ctx.run(fetcher))
     }
 
-    /// Returns a new `Fetcher` struct.
-    fn new(
+    fn try_new(
         config: &Config,
         thread_updater: Addr<ThreadUpdater>,
         fetcher: Addr<Self>,

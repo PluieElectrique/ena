@@ -96,7 +96,7 @@ pub struct Database {
 }
 
 impl Database {
-    pub fn new(config: &Config) -> Result<Self, Error> {
+    pub fn try_new(config: &Config) -> Result<Self, Error> {
         let pool_opts = Opts::from_url(&config.database_media.database_url)?;
         let pool = Pool::new(pool_opts);
         let mut runtime = Runtime::new().unwrap();
