@@ -3,7 +3,6 @@
 use std::fmt;
 
 use serde::{Deserialize, Deserializer};
-use serde_derive::Deserialize;
 
 mod tests;
 

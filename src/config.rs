@@ -11,7 +11,6 @@ use std::{
 
 use failure::{Fail, ResultExt};
 use serde::{de::Error, Deserialize, Deserializer};
-use serde_derive::Deserialize;
 use toml::Value;
 
 use crate::four_chan::Board;

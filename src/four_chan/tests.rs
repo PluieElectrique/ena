@@ -4,7 +4,7 @@ use failure::Error;
 use futures::prelude::*;
 use hyper::{Body, Client};
 use hyper_tls::HttpsConnector;
-use serde_derive::Deserialize;
+use serde::Deserialize;
 use tokio::runtime::Runtime;
 
 use super::{num_to_bool, API_URI_PREFIX};
