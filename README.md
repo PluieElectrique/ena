@@ -6,7 +6,7 @@ A 4chan scraper. Currently designed to be a (mostly) compatible, improved replac
 
 Install and configure a MySQL-compatible database (tested on MariaDB 10.1). If you are running Ena with FoolFuuka, consider referring to the [instructions](https://wiki.bibanon.org/FoolFuuka) at the Bibliotheca Anonoma wiki.
 
-Copy the default configuration file `ena.example.toml` to `ena.toml` and adjust the settings as necessary. Then, [install Rust](https://www.rust-lang.org/install.html) and compile and run Ena with:
+Copy the default configuration file `ena.example.toml` to `ena.toml` and adjust the settings as necessary. Then, [install Rust](https://www.rust-lang.org/tools/install). Ena requires a minimum Rust version of `1.31.0` (Rust 2018). Finally, compile and run Ena with:
 
 ```sh
 cargo run --release
