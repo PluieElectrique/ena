@@ -264,7 +264,6 @@ impl BoardPoller {
         ctx.spawn(
             self.fetcher
                 .send(FetchArchive(board))
-                .map_err(|err| log_error!(&err))
                 .into_actor(self)
                 .map(move |res, act, _ctx| match res {
                     Ok(threads) => {
@@ -286,7 +285,7 @@ impl BoardPoller {
                     Err(err) => error!("/{}/: Failed to fetch archive: {}", board, err),
                 })
                 .map_err(move |err, _act, _ctx| {
-                    error!("/{}/: Failed to fetch archive: {:?}", board, err)
+                    error!("/{}/: Failed to fetch archive: {}", board, err)
                 }),
         );
     }
