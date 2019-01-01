@@ -1,5 +1,7 @@
+# Rust files
 /target
 **/*.rs.bk
 
+# Ena config file and media
 /ena.toml
 /media
