@@ -144,9 +144,12 @@ impl BoardPoller {
                     Some(None) => {
                         updates.push(BumpedOff(thread.no));
                     }
-                    // There is no last thread in the current list. So, the board is empty and all
-                    // threads were deleted. (The "phantom thread" argument from above applies here,
-                    // but if the board is empty, it's just more likely everything was deleted.)
+                    // There is no last thread in the current list. So, the board is empty.
+                    // Technically, we can't assume any threads were deleted because the phantom
+                    // thread argument from above applies here. But, that would require an entire
+                    // board getting deleted between polls, which is highly unlikely unless our poll
+                    // interval is ridiculously long, in which case all bets are off since we're
+                    // losing tons of data anyways. So, we assume that all threads were deleted.
                     None => {
                         updates.push(Deleted(thread.no));
                     }
