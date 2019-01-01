@@ -1,6 +1,6 @@
 use std::{collections::HashMap, hash::Hasher, sync::Arc};
 
-use ::actix::prelude::*;
+use actix::prelude::*;
 use chrono::prelude::*;
 use futures::{
     future::{self, Either},

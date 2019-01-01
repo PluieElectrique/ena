@@ -1,6 +1,6 @@
 use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
 
-use ::actix::{dev::ResponseChannel, prelude::*};
+use actix::{dev::ResponseChannel, prelude::*};
 use chrono::prelude::*;
 use failure::{Error, ResultExt};
 use futures::{

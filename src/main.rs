@@ -1,7 +1,7 @@
 use std::io::Write;
 use std::process;
 
-use ::actix::prelude::*;
+use actix::prelude::*;
 use log::{error, info};
 
 use ena::{actors::*, config::parse_config, log_error};

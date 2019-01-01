@@ -1,4 +1,4 @@
-use ::actix::{dev::MessageResponse, prelude::*};
+use actix::{dev::MessageResponse, prelude::*};
 use futures::sync::mpsc::Sender;
 
 use super::*;

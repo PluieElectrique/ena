@@ -1,6 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
 
-use ::actix::prelude::*;
+use actix::prelude::*;
 use chrono::prelude::*;
 use chrono_tz::America;
 use futures::{future, prelude::*};

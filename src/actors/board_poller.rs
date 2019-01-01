@@ -4,7 +4,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use ::actix::{fut, prelude::*};
+use actix::{fut, prelude::*};
 use chrono::prelude::*;
 use futures::prelude::*;
 use log::Level;
