@@ -5,3 +5,7 @@
 # Ena config file and media
 /ena.toml
 /media
+
+# TLA Toolbox and generated spec PDFs
+/spec/*.toolbox
+/spec/*.pdf
