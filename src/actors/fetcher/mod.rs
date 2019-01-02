@@ -418,7 +418,7 @@ fn fetch_media(
             let filename = filename.clone();
             move |_| {
                 debug!(
-                    "/{}/: Writing {}{}",
+                    "/{}/: Fetched {}{}",
                     board,
                     if is_thumb { "" } else { " " },
                     filename
