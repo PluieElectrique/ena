@@ -382,14 +382,15 @@ impl Handler<UpdatePost> for Database {
     type Result = ResponseFuture<(), Error>;
 
     fn handle(&mut self, msg: UpdatePost, _ctx: &mut Self::Context) -> Self::Result {
+        let board = msg.0;
         let params = msg.1.into_iter().map(move |(no, comment, spoiler)| {
             params! {
                 "num" => no,
-                comment,
+                "comment" => comment.map(|comment| html::clean(comment, Some((board, no)))),
                 "spoiler" => spoiler.unwrap_or(false),
             }
         });
-        let update_post_query = UPDATE_POST_QUERY.replace(BOARD_REPLACE, &msg.0.to_string());
+        let update_post_query = UPDATE_POST_QUERY.replace(BOARD_REPLACE, &board.to_string());
         Box::new(
             self.pool
                 .get_conn()
