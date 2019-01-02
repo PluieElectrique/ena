@@ -209,14 +209,20 @@ impl BoardPoller {
 
             let len = updates.len();
             debug!(
-                "/{}/: Updating {} thread{}{}{}{}{}",
+                "/{}/: Updating {} thread{} ({})",
                 board,
                 len,
                 if len == 1 { "" } else { "s" },
-                zero_format!(", {} new", new),
-                zero_format!(", {} modified", modified),
-                zero_format!(", {} bumped off", bumped_off),
-                zero_format!(", {} deleted", deleted),
+                nonzero_list_format!(
+                    "{} new",
+                    new,
+                    "{} modified",
+                    modified,
+                    "{} bumped off",
+                    bumped_off,
+                    "{} deleted",
+                    deleted,
+                ),
             );
         }
 

@@ -5,7 +5,8 @@
 #[macro_use]
 extern crate log;
 
-macro_rules! zero_format {
+/// Format the given number if it is nonzero. Otherwise, return an empty string.
+macro_rules! format_if_nonzero {
     ($str:expr, $expr:expr) => {{
         let num = $expr;
         if num == 0 {
@@ -14,6 +15,20 @@ macro_rules! zero_format {
             format!($str, num)
         }
     }};
+}
+
+/// A helper macro for creating a comma-separated `String` list of `format_if_nonzero!` items.
+macro_rules! nonzero_list_format {
+    ($($str:expr, $expr:expr),+ $(,)*) => {
+        [$(format_if_nonzero!($str, $expr)),+]
+        .iter()
+        .fold(String::new(), |mut acc, s| {
+            if !acc.is_empty() && !s.is_empty() {
+                acc.push_str(", ");
+            }
+            acc + s
+        })
+    };
 }
 
 /// A helper macro for logging an error and its causes.

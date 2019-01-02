@@ -150,20 +150,24 @@ impl ThreadUpdater {
         }
 
         if log_enabled!(Level::Debug) {
-            let n = new_posts.len();
-            let m = modified_posts.len();
-            let d = deleted_posts.len();
-            // Nice formatting by horrendously using arithmetic as logic
-            if (n + m + d) > 0 {
+            let new = new_posts.len();
+            let modified = modified_posts.len();
+            let deleted = deleted_posts.len();
+
+            // There might not always be post updates (e.g. only OP data was updated)
+            if (new + modified + deleted) > 0 {
                 debug!(
-                    "/{}/ No. {}: {}{}{}{}{}",
+                    "/{}/ No. {}: {}",
                     board,
                     no,
-                    zero_format!("{} new", n),
-                    if n * (m + d) == 0 { "" } else { ", " },
-                    zero_format!("{} modified", m),
-                    if d * m == 0 { "" } else { ", " },
-                    zero_format!("{} deleted", d),
+                    nonzero_list_format!(
+                        "{} new",
+                        new,
+                        "{} modified",
+                        modified,
+                        "{} deleted",
+                        deleted,
+                    ),
                 );
             }
         }
