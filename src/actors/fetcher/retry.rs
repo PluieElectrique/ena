@@ -1,6 +1,11 @@
 use std::time::Duration;
 
-use futures::{prelude::*, stream::Fuse};
+use futures::{
+    prelude::*,
+    stream::Fuse,
+    sync::mpsc::{self, Receiver, Sender},
+};
+
 use tokio::timer::DelayQueue;
 
 use crate::config::RetryBackoffConfig;
@@ -111,4 +116,9 @@ where
             }
         }
     }
+}
+
+pub fn retry_channel<T>(buffer: usize) -> (Sender<Retry<T>>, RetryQueue<Receiver<Retry<T>>, T>) {
+    let (sender, receiver) = mpsc::channel(buffer);
+    (sender, RetryQueue::new(receiver))
 }

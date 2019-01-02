@@ -27,11 +27,7 @@ mod rate_limiter;
 mod retry;
 
 pub use self::{error::FetchError, messages::*};
-use self::{
-    helper::*,
-    rate_limiter::StreamExt,
-    retry::{Retry, RetryQueue},
-};
+use self::{helper::*, rate_limiter::StreamExt, retry::Retry};
 
 type HttpsClient = Client<HttpsConnector<HttpConnector>>;
 
@@ -101,7 +97,7 @@ impl Fetcher {
             let client = client.clone();
             let media_path = config.database_media.media_path.to_owned();
 
-            let (retry_sender, retry_receiver) = mpsc::channel(MEDIA_CHANNEL_CAPACITY);
+            let (retry_sender, retry_receiver) = retry::retry_channel(MEDIA_CHANNEL_CAPACITY);
             let retry_backoff = config.network.retry_backoff;
 
             let future = receiver
@@ -110,7 +106,7 @@ impl Fetcher {
                 })
                 .flatten()
                 .map(move |request| Retry::new(request, &retry_backoff))
-                .select(RetryQueue::new(retry_receiver))
+                .select(retry_receiver)
                 .map(move |retry| {
                     fetch_media_retry(retry, &client, media_path.clone(), retry_sender.clone())
                 })
@@ -124,7 +120,7 @@ impl Fetcher {
             let (sender, receiver) = mpsc::channel(THREAD_CHANNEL_CAPACITY);
             let client = client.clone();
 
-            let (retry_sender, retry_receiver) = mpsc::channel(THREAD_CHANNEL_CAPACITY);
+            let (retry_sender, retry_receiver) = retry::retry_channel(THREAD_CHANNEL_CAPACITY);
             let retry_backoff = config.network.retry_backoff;
 
             let future = receiver
@@ -138,7 +134,7 @@ impl Fetcher {
                 })
                 .flatten()
                 .map(move |request| Retry::new(request, &retry_backoff))
-                .select(RetryQueue::new(retry_receiver))
+                .select(retry_receiver)
                 .map(move |retry| {
                     fetch_thread_retry(
                         retry,
