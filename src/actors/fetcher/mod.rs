@@ -289,16 +289,9 @@ fn fetch_thread_retry(
                     _ => true,
                 };
 
-            let &(FetchThread(board, no, _), _) = retry.as_data();
-            error!(
-                "/{}/ No. {}: Failed to fetch, {}retrying: {}",
-                board,
-                no,
-                if will_retry { "" } else { "not " },
-                err
-            );
-
             if will_retry {
+                let &(FetchThread(board, no, _), _) = retry.as_data();
+                error!("/{}/ No. {}: Failed to fetch, retrying: {}", board, no, err);
                 return Either::A(
                     retry_sender
                         .send(retry)
@@ -382,7 +375,6 @@ fn fetch_media(
     real_path.push(&filename);
 
     if real_path.exists() {
-        error!("/{}/: Media {} already exists!", board, filename);
         return Either::A(future::err(FetchError::ExistingMedia));
     }
 
@@ -446,10 +438,10 @@ fn fetch_media_retry(
 
         let &(board, ref filename) = retry.as_data();
         error!(
-            "/{}/: Failed to fetch media {}, {}retrying: {}",
+            "/{}/: Failed to fetch {}{}: {}",
             board,
             filename,
-            if will_retry { "" } else { "not " },
+            if will_retry { ", retrying" } else { "" },
             err
         );
 
