@@ -151,12 +151,7 @@ impl Handler<GetUnarchivedThreads> for Database {
     type Result = ResponseFuture<Vec<u64>, Error>;
 
     fn handle(&mut self, msg: GetUnarchivedThreads, _ctx: &mut Self::Context) -> Self::Result {
-        let params = msg.1.into_iter().map(|id| {
-            params! {
-                id,
-            }
-        });
-
+        let params = msg.1.into_iter().map(|id| params! { id });
         let thread_query = UNARCHIVED_THREAD_QUERY.replace(BOARD_REPLACE, &msg.0.to_string());
 
         Box::new(
