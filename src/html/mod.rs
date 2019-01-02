@@ -1,5 +1,7 @@
 //! 4chan HTML unescaping and cleaning (HTML to BBCode conversion).
 
+// We use trivial regexes because of useful methods like is_match and replace_all, which are much
+// faster than their std equivalents.
 #![allow(clippy::trivial_regex)]
 
 use std::borrow::Cow;
