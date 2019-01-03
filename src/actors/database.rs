@@ -17,76 +17,6 @@ const DATABASE_MAILBOX_CAPACITY: usize = 1000;
 
 const BOARD_REPLACE: &str = "%%BOARD%%";
 const CHARSET_REPLACE: &str = "%%CHARSET%%";
-const BOARD_SQL: &str = include_str!("../sql/boards.sql");
-const INDEX_COUNTERS_SQL: &str = include_str!("../sql/index_counters.sql");
-const TRIGGER_SQL: &str = include_str!("../sql/triggers.sql");
-
-// archive_threads is a temporary table created in Handler<GetUnarchivedThreads>
-const UNARCHIVED_THREAD_QUERY: &str = "
-DELETE archive_threads FROM archive_threads
-INNER JOIN `%%BOARD%%` ON id = num AND subnum = 0
-WHERE timestamp_expired != 0;
-DELETE archive_threads FROM archive_threads
-INNER JOIN `%%BOARD%%_deleted` ON id = num AND subnum = 0;";
-
-const NEXT_NUM_QUERY: &str = "
-SELECT COALESCE(MAX(num) + 1, :num_start)
-FROM `%%BOARD%%`
-WHERE
-    num BETWEEN :num_start AND :num_end
-    AND subnum = 0
-    AND thread_num = :thread_num;";
-
-// Columns missing from this query like media_id, poster_ip, email, delpass, and exif are either
-// always set to their defaults, set by triggers, or unused by Ena
-const INSERT_QUERY: &str = "
-INSERT INTO `%%BOARD%%` (num, subnum, thread_num, op, timestamp, timestamp_expired, preview_orig,
-preview_w, preview_h, media_filename, media_w, media_h, media_size, media_hash, media_orig, spoiler,
-capcode, name, trip, title, comment, sticky, locked, poster_hash, poster_country)
-SELECT :num, :subnum, :thread_num, :op, :timestamp, :timestamp_expired, :preview_orig, :preview_w,
-:preview_h, :media_filename, :media_w, :media_h, :media_size, :media_hash, :media_orig, :spoiler,
-:capcode, :name, :trip, :title, :comment, :sticky, :locked, :poster_hash, :poster_country
-WHERE NOT EXISTS (SELECT * FROM `%%BOARD%%_deleted` WHERE num in (:num, :thread_num) AND subnum = 0)
-ON DUPLICATE KEY UPDATE
-    sticky = VALUES(sticky),
-    locked = VALUES(locked),
-    timestamp_expired = VALUES(timestamp_expired),
-    comment = VALUES(comment),
-    spoiler = VALUES(spoiler);";
-
-const NEW_MEDIA_QUERY: &str = "
-SELECT
-    IF(media_orig = media, media_orig, NULL),
-    preview_orig
-FROM `%%BOARD%%`
-INNER JOIN `%%BOARD%%_images` ON
-    `%%BOARD%%`.media_id = `%%BOARD%%_images`.media_id
-    AND preview_orig IN (preview_reply, preview_op)
-WHERE
-    num BETWEEN :num_start AND :num_end
-    AND subnum = 0
-    AND thread_num = :thread_num
-    AND banned = 0;";
-
-const UPDATE_OP_QUERY: &str = "
-UPDATE `%%BOARD%%`
-SET sticky = :sticky, locked = :locked, timestamp_expired = :timestamp_expired
-WHERE num = :num AND subnum = 0";
-
-const UPDATE_OP_NO_LOCK_QUERY: &str = "
-UPDATE `%%BOARD%%`
-SET sticky = :sticky, timestamp_expired = :timestamp_expired
-WHERE num = :num AND subnum = 0";
-
-const UPDATE_POST_QUERY: &str = "
-UPDATE `%%BOARD%%`
-SET comment = :comment, spoiler = :spoiler
-WHERE num = :num AND subnum = 0";
-
-const MARK_REMOVED_QUERY: &str = "
-UPDATE `%%BOARD%%`
-SET deleted = :deleted, timestamp_expired = :timestamp_expired
-WHERE num = :num AND subnum = 0";
 
 /// An actor which provides an interface to the MySQL database.
 pub struct Database {
@@ -104,7 +34,7 @@ impl Database {
         if config.asagi_compat.create_index_counters {
             runtime.block_on(
                 pool.get_conn()
-                    .and_then(|conn| conn.drop_query(INDEX_COUNTERS_SQL))
+                    .and_then(|conn| conn.drop_query(include_str!("../sql/index_counters.sql")))
                     .and_then(|conn| conn.disconnect()),
             )?;
         }
@@ -112,11 +42,12 @@ impl Database {
         runtime.block_on({
             let boards: Vec<Board> = config.boards.keys().cloned().collect();
             let pool = pool.clone();
-            let board_sql = BOARD_SQL.replace(CHARSET_REPLACE, &config.database_media.charset);
+            let board_sql = include_str!("../sql/boards.sql")
+                .replace(CHARSET_REPLACE, &config.database_media.charset);
             future::join_all(boards.into_iter().map(move |board| {
                 let mut init_sql = String::new();
-                init_sql.push_str(&board_sql.replace(BOARD_REPLACE, &board.to_string()));
-                init_sql.push_str(&TRIGGER_SQL.replace(BOARD_REPLACE, &board.to_string()));
+                init_sql.push_str(&board_replace(board, &board_sql));
+                init_sql.push_str(&board_replace(board, include_str!("../sql/triggers.sql")));
 
                 pool.get_conn()
                     .and_then(|conn| conn.drop_query(init_sql))
@@ -151,19 +82,27 @@ impl Handler<GetUnarchivedThreads> for Database {
     type Result = ResponseFuture<Vec<u64>, Error>;
 
     fn handle(&mut self, msg: GetUnarchivedThreads, _ctx: &mut Self::Context) -> Self::Result {
-        let params = msg.1.into_iter().map(|id| params! { id });
-        let thread_query = UNARCHIVED_THREAD_QUERY.replace(BOARD_REPLACE, &msg.0.to_string());
-
         Box::new(
             self.pool
                 .get_conn()
                 .and_then(|conn| {
                     conn.drop_query("CREATE TEMPORARY TABLE archive_threads (id int unsigned);")
                 })
-                .and_then(|conn| {
-                    conn.batch_exec("INSERT INTO archive_threads SET id = :id;", params)
+                .and_then({
+                    let params = msg.1.into_iter().map(|id| params! { id });
+                    |conn| conn.batch_exec("INSERT INTO archive_threads SET id = :id;", params)
                 })
-                .and_then(|conn| conn.drop_query(thread_query))
+                .and_then({
+                    let query = board_replace(
+                        msg.0,
+                        "DELETE archive_threads FROM archive_threads \
+                         INNER JOIN `%%BOARD%%` ON id = num AND subnum = 0 \
+                         WHERE timestamp_expired != 0; \
+                         DELETE archive_threads FROM archive_threads \
+                         INNER JOIN `%%BOARD%%_deleted` ON id = num AND subnum = 0;",
+                    );
+                    |conn| conn.drop_query(query)
+                })
                 .and_then(|conn| conn.query("SELECT id FROM archive_threads;"))
                 .and_then(|result| result.collect_and_drop())
                 .and_then(|(conn, nums)| {
@@ -272,7 +211,27 @@ impl Handler<InsertPosts> for Database {
             params
         });
 
-        let insert_query = INSERT_QUERY.replace(BOARD_REPLACE, &msg.0.to_string());
+        // Columns missing from this query like media_id, poster_ip, email, delpass, and exif are
+        // either always set to their defaults, set by triggers, or unused by Ena
+        let insert_query = board_replace(
+            msg.0,
+            "INSERT INTO `%%BOARD%%` (num, subnum, thread_num, op, timestamp, timestamp_expired, \
+             preview_orig, preview_w, preview_h, media_filename, media_w, media_h, media_size, \
+             media_hash, media_orig, spoiler, capcode, name, trip, title, comment, sticky, locked, \
+             poster_hash, poster_country) \
+             SELECT :num, :subnum, :thread_num, :op, :timestamp, :timestamp_expired, :preview_orig, \
+             :preview_w, :preview_h, :media_filename, :media_w, :media_h, :media_size, :media_hash, \
+             :media_orig, :spoiler, :capcode, :name, :trip, :title, :comment, :sticky, :locked, \
+             :poster_hash, :poster_country \
+             WHERE NOT EXISTS ( \
+                 SELECT * FROM `%%BOARD%%_deleted` WHERE num in (:num, :thread_num) AND subnum = 0) \
+             ON DUPLICATE KEY UPDATE \
+                 sticky = VALUES(sticky), \
+                 locked = VALUES(locked), \
+                 timestamp_expired = VALUES(timestamp_expired), \
+                 comment = VALUES(comment), \
+                 spoiler = VALUES(spoiler);",
+        );
 
         let download_media = self.boards[&board].download_media;
         let download_thumbs = self.boards[&board].download_thumbs;
@@ -284,34 +243,53 @@ impl Handler<InsertPosts> for Database {
                     .map(|_conn| vec![]),
             )
         } else {
-            let next_num_query = NEXT_NUM_QUERY.replace(BOARD_REPLACE, &msg.0.to_string());
-            let new_media_query = NEW_MEDIA_QUERY.replace(BOARD_REPLACE, &msg.0.to_string());
-
             let thread_num = msg.1;
             Box::new(
                 self.pool
                     .get_conn()
-                    .and_then(move |conn| {
-                        conn.first_exec(
-                            next_num_query,
-                            params! {
-                                num_start,
-                                num_end,
-                                thread_num,
-                            },
-                        )
+                    .and_then({
+                        let query = board_replace(
+                            msg.0,
+                            "SELECT COALESCE(MAX(num) + 1, :num_start) \
+                             FROM `%%BOARD%%` \
+                             WHERE
+                                 num BETWEEN :num_start AND :num_end \
+                                 AND subnum = 0 \
+                                 AND thread_num = :thread_num;",
+                        );
+                        move |conn| {
+                            conn.first_exec(query, params! { num_start, num_end, thread_num })
+                        }
                     })
-                    .and_then(move |(conn, next_num): (_, Option<(u64,)>)| {
-                        conn.batch_exec(insert_query, params).and_then(move |conn| {
-                            conn.prep_exec(
-                                new_media_query,
-                                params! {
-                                    "num_start" => next_num.unwrap().0,
-                                    num_end,
-                                    thread_num,
-                                },
-                            )
-                        })
+                    .and_then({
+                        let new_media_query = board_replace(
+                            msg.0,
+                            "SELECT
+                                 IF(media_orig = media, media_orig, NULL), \
+                                 preview_orig \
+                             FROM `%%BOARD%%` \
+                             INNER JOIN `%%BOARD%%_images` ON
+                                 `%%BOARD%%`.media_id = `%%BOARD%%_images`.media_id \
+                                 AND preview_orig IN (preview_reply, preview_op) \
+                             WHERE
+                                 num BETWEEN :num_start AND :num_end \
+                                 AND subnum = 0 \
+                                 AND thread_num = :thread_num \
+                                 AND banned = 0;",
+                        );
+
+                        move |(conn, next_num): (_, Option<(u64,)>)| {
+                            conn.batch_exec(insert_query, params).and_then(move |conn| {
+                                conn.prep_exec(
+                                    new_media_query,
+                                    params! {
+                                        "num_start" => next_num.unwrap().0,
+                                        num_end,
+                                        thread_num,
+                                    },
+                                )
+                            })
+                        }
                     })
                     .and_then(move |results| {
                         results.reduce_and_drop(vec![], move |mut files: Vec<String>, row| {
@@ -351,18 +329,28 @@ impl Handler<UpdateOp> for Database {
         };
 
         // Preserve the locked status of a thread by only updating it if it hasn't been archived yet
-        let update_op_query;
+        let query;
         if msg.2.archived {
-            update_op_query = UPDATE_OP_NO_LOCK_QUERY.replace(BOARD_REPLACE, &msg.0.to_string());
+            query = board_replace(
+                msg.0,
+                "UPDATE `%%BOARD%%` \
+                 SET sticky = :sticky, timestamp_expired = :timestamp_expired \
+                 WHERE num = :num AND subnum = 0",
+            );
         } else {
-            update_op_query = UPDATE_OP_QUERY.replace(BOARD_REPLACE, &msg.0.to_string());
+            query = board_replace(
+                msg.0,
+                "UPDATE `%%BOARD%%` \
+                 SET sticky = :sticky, locked = :locked, timestamp_expired = :timestamp_expired \
+                 WHERE num = :num AND subnum = 0",
+            );
             params.push((String::from("locked"), Value::from(msg.2.closed)));
         }
 
         Box::new(
             self.pool
                 .get_conn()
-                .and_then(|conn| conn.drop_exec(update_op_query, params))
+                .and_then(|conn| conn.drop_exec(query, params))
                 .map(|_conn| ()),
         )
     }
@@ -378,6 +366,12 @@ impl Handler<UpdatePost> for Database {
 
     fn handle(&mut self, msg: UpdatePost, _ctx: &mut Self::Context) -> Self::Result {
         let board = msg.0;
+        let query = board_replace(
+            board,
+            "UPDATE `%%BOARD%%` \
+             SET comment = :comment, spoiler = :spoiler \
+             WHERE num = :num AND subnum = 0",
+        );
         let params = msg.1.into_iter().map(move |(no, comment, spoiler)| {
             params! {
                 "num" => no,
@@ -385,11 +379,10 @@ impl Handler<UpdatePost> for Database {
                 "spoiler" => spoiler.unwrap_or(false),
             }
         });
-        let update_post_query = UPDATE_POST_QUERY.replace(BOARD_REPLACE, &board.to_string());
         Box::new(
             self.pool
                 .get_conn()
-                .and_then(|conn| conn.batch_exec(update_post_query, params))
+                .and_then(|conn| conn.batch_exec(query, params))
                 .map(|_conn| ()),
         )
     }
@@ -409,6 +402,12 @@ impl Handler<MarkPostsRemoved> for Database {
     type Result = ResponseFuture<(), Error>;
 
     fn handle(&mut self, msg: MarkPostsRemoved, _ctx: &mut Self::Context) -> Self::Result {
+        let query = board_replace(
+            msg.0,
+            "UPDATE `%%BOARD%%` \
+             SET deleted = :deleted, timestamp_expired = :timestamp_expired \
+             WHERE num = :num AND subnum = 0",
+        );
         let timestamp_expired = msg.2.adjust(self.adjust_timestamps);
         let params = msg.1.into_iter().map(move |(no, status)| {
             params! {
@@ -420,11 +419,10 @@ impl Handler<MarkPostsRemoved> for Database {
                 timestamp_expired,
             }
         });
-        let mark_removed_query = MARK_REMOVED_QUERY.replace(BOARD_REPLACE, &msg.0.to_string());
         Box::new(
             self.pool
                 .get_conn()
-                .and_then(|conn| conn.batch_exec(mark_removed_query, params))
+                .and_then(|conn| conn.batch_exec(query, params))
                 .map(|_conn| ()),
         )
     }
@@ -457,4 +455,8 @@ impl TimestampExt for DateTime<Utc> {
             self.timestamp() as u64
         }
     }
+}
+
+fn board_replace(board: Board, query: &str) -> String {
+    query.replace(BOARD_REPLACE, &board.to_string())
 }
