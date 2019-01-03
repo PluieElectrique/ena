@@ -1,4 +1,5 @@
 use std::{
+    cmp::Ordering,
     collections::HashMap,
     sync::Arc,
     time::{Duration, Instant},
@@ -79,116 +80,157 @@ impl BoardPoller {
     ) {
         use self::ThreadUpdate::*;
         let mut updates = vec![];
-
-        let push_removed = {
-            // To determine if a removed thread was bumped off or deleted, we use the "anchor
-            // thread" heuristic. Note that when in doubt, we always assume that a removed thread
-            // was bumped off, as deletions are much rarer.
-            //
-            // Now, the anchor thread is the thread which:
-            // 1. Is the last thread of the current thread list,
-            // Note: Any current thread which satisfies 2 and 3 is an anchor, but the last thread
-            //       makes for the best anchor, as it lets us catch as many deleted threads as
-            //       possible. To keep things simple, if the last thread turns out to not be a valid
-            //       anchor (which is unlikely), we don't consider other threads.
-            let anchor_index = curr_threads.last().map(|last_thread| {
-                self.threads[&board]
-                    .iter()
-                    .rev()
-                    // 2. Appears in the previous thread list (i.e. is not a new thread), and
-                    .find(|thread| thread.no == last_thread.no)
-                    // 3. Has not been bumped since the last poll.
-                    // Note: last_modified is updated when a new post is added and bumps the thread.
-                    //       But it's also updated when the thread is saged. We should accept saged
-                    //       threads as anchors, since they weren't bumped, but we can't tell them
-                    //       apart from bumped threads. So, this check could reject a valid anchor.
-                    .filter(|thread| thread.last_modified == last_thread.last_modified)
-                    // Get the index of the anchor in the previous thread list
-                    .map(|thread| thread.bump_index)
-            });
-
-            move |thread: &Thread, updates: &mut Vec<ThreadUpdate>| {
-                match anchor_index {
-                    // We found an anchor and will use it to determine if a thread has been
-                    // deleted or bumped off.
-                    Some(Some(anchor)) => {
-                        if thread.bump_index < anchor {
-                            // If the removed thread was before the anchor, it was deleted.
-                            // Proof:
-                            //   1. Two threads only swap orders when the bottom one is bumped.
-                            //      (Stickying the bottom thread would also swap the order, but
-                            //      that's too rare to worry about. Stickies should also update
-                            //      last_modified, which will be caught by the check above.)
-                            //   2. The anchor was not bumped and was behind the removed thread.
-                            //   3. So, the anchor was always behind the removed thread.
-                            //   4. Only the last thread on the board can be bumped off.
-                            //   5. The removed thread could never have been the last thread on the
-                            //      board, as the anchor was always behind it.
-                            //   6. So, the removed thread could not have been bumped off.
-                            updates.push(Deleted(thread.no));
-                        } else {
-                            // A thread after the anchor could have been the last thread at some
-                            // point. So, we assume it was bumped off. Even if the thread lists are:
-                            //        No. 1             No. 1
-                            //  prev  No. 2  -->  curr  No. 2
-                            //        No. 3
-                            // We can't say for sure that No. 3 was deleted. Between polls, a new
-                            // "phantom" thread could have been added, bumping off No. 3, and then
-                            // deleted soon after. This could happen if our poll_interval is long or
-                            // threads are being deleted quickly (e.g. in response to a raid).
-                            updates.push(BumpedOff(thread.no));
-                        }
-                    }
-                    // The board isn't empty, but we didn't find a valid anchor (maybe all threads
-                    // are new or were modified). So, we assume all removed threads were bumped off.
-                    Some(None) => {
-                        updates.push(BumpedOff(thread.no));
-                    }
-                    // There is no last thread in the current list. So, the board is empty.
-                    // Technically, we can't assume any threads were deleted because the phantom
-                    // thread argument from above applies here. But, that would require an entire
-                    // board getting deleted between polls, which is highly unlikely unless our poll
-                    // interval is ridiculously long, in which case all bets are off since we're
-                    // losing tons of data anyways. So, we assume that all threads were deleted.
-                    None => {
-                        updates.push(Deleted(thread.no));
-                    }
-                }
-            }
-        };
+        let mut removed = vec![];
+        let anchor_no = curr_threads.last().map(|anchor| anchor.no);
+        let mut found_anchor = false;
 
         // Sort ascending by no
         curr_threads.sort_by(|a, b| a.no.cmp(&b.no));
 
         let mut prev_iter = self.threads[&board].iter();
         let mut curr_iter = curr_threads.iter();
-
         let mut curr_thread = curr_iter.next();
 
         loop {
             match (prev_iter.next(), curr_thread) {
                 (Some(prev), Some(curr)) => {
-                    assert!(prev.no <= curr.no);
-
-                    if prev.no == curr.no {
-                        assert!(prev.last_modified <= curr.last_modified);
-
-                        if prev.last_modified < curr.last_modified {
-                            updates.push(Modified(curr.no));
+                    match prev.no.cmp(&curr.no) {
+                        Ordering::Less => removed.push(prev),
+                        Ordering::Equal => {
+                            match prev.last_modified.cmp(&curr.last_modified) {
+                                Ordering::Less => updates.push(Modified(curr.no)),
+                                // We found an anchor: a thread which is not new and was not
+                                // modified. See the comments below before `let anchor_index = ...`
+                                // for a more detailed explanation of what this means.
+                                Ordering::Equal => found_anchor = true,
+                                Ordering::Greater => {
+                                    // This should be an assert, but it seems that we can receive
+                                    // old data even when using Last-Modified. So, we try to keep
+                                    // running instead of crashing.
+                                    error!(
+                                        "/{}/ No. {} went back in time! Discarding this poll",
+                                        board, prev.no
+                                    );
+                                    return;
+                                }
+                            }
+                            curr_thread = curr_iter.next();
                         }
-                        curr_thread = curr_iter.next();
-                    } else if prev.no < curr.no {
-                        push_removed(prev, &mut updates);
+                        Ordering::Greater => {
+                            // Again, bail instead of crashing.
+                            error!(
+                                "/{}/ Old thread No. {} reappeared! Discarding this poll",
+                                board, prev.no
+                            );
+                            return;
+                        }
                     }
                 }
                 (Some(prev), None) => {
-                    push_removed(prev, &mut updates);
+                    removed.push(prev);
                 }
                 (None, Some(curr)) => {
                     updates.push(New(curr.no));
                     curr_thread = curr_iter.next();
                 }
                 (None, None) => break,
+            }
+        }
+
+        // To determine if a removed thread was bumped off or deleted, we use the "anchor thread"
+        // heuristic. Note that when in doubt, we always assume that a removed thread was bumped
+        // off, as deletions are much rarer.
+        //
+        // An anchor thread is a thread which:
+        //   1. Appears in the previous thread list (i.e. is not a new thread), and
+        //   2. Has not been bumped since the last poll.
+        //
+        // Any thread which satisfies 1 and 2 is a valid anchor, but the last thread in the current
+        // list is the best because it lets us catch as many deleted threads as possible.
+        //
+        // Now, if we find at least one anchor (found_anchor is set to true), the last thread in the
+        // current list must also be an anchor. We can prove this:
+        //
+        // First, an axiom:
+        //   Two threads only swap orders when the bottom one is bumped. (Stickying the bottom
+        //   thread would also swap the order, but that's too rare to worry about.)
+        //
+        // Proof by contradiction:
+        //   a. Assume the last thread is either new or was bumped. Then, at some point it must have
+        //      been at the top of the thread list (disregarding stickies).
+        //   b. For this thread to become the last thread, it must have swapped orders with the
+        //      anchor we found. Thus, the anchor must have been bumped.
+        //   c. But by definition, an anchor cannot have been bumped. Thus, the last thread cannot
+        //      have been new or bumped.
+        //
+        // But, why can't we directly check that the last current thread wasn't modified and isn't
+        // new? Well, we could, but saging a thread updates last_modified without bumping it. So, if
+        // the last thread was saged, we would reject a valid anchor. With this method, we can prove
+        // the last thread is a valid anchor even if it has been modified. We'll only reject a valid
+        // anchor if every thread is saged between polls, which is very unlikely.
+        let anchor_index = if self.threads.is_empty() {
+            // Every thread is new, so we have no anchor.
+            None
+        } else if found_anchor {
+            let anchor_no = anchor_no.unwrap();
+            // We want the bump index of the anchor in the previous thread list.
+            let anchor = self.threads[&board]
+                .iter()
+                .rev()
+                .find(|thread| thread.no == anchor_no);
+            match anchor {
+                Some(anchor) => Some(anchor.bump_index),
+                None => {
+                    // I've made a logic mistake or false assumption about how threads work. Or,
+                    // we've somehow received old data.
+                    error!(
+                        "/{}/ No. {} should be an anchor but is actually a new thread!",
+                        board, anchor_no,
+                    );
+                    return;
+                }
+            }
+        } else {
+            None
+        };
+
+        for thread in &removed {
+            match anchor_index {
+                // We found an anchor and will use it to determine if a thread has been deleted or
+                // bumped off.
+                Some(anchor) => {
+                    if thread.bump_index < anchor {
+                        // If the removed thread was previously before the anchor, it was deleted.
+                        // Recall the axiom from above:
+                        //   Two threads only swap orders when the bottom one is bumped. (Stickying
+                        //   the bottom thread would also swap the order, but that's too rare to
+                        //   worry about.)
+                        // Proof:
+                        //   a. The anchor was not bumped and was behind the removed thread.
+                        //   b. So, the anchor was always behind the removed thread.
+                        //   c. Only the last thread on the board can be bumped off.
+                        //   d. The removed thread could never have been the last thread on the
+                        //      board, as the anchor was always behind it.
+                        //   e. So, the removed thread could not have been bumped off.
+                        updates.push(Deleted(thread.no));
+                    } else {
+                        // A thread after the anchor could have been the last thread at some point.
+                        // So, we assume it was bumped off. Even if the thread lists are:
+                        //        No. 1             No. 1
+                        //  prev  No. 2  -->  curr  No. 2
+                        //        No. 3
+                        // We can't say for sure that No. 3 was deleted. Between polls, a new
+                        // "phantom" thread could have been added, bumping off No. 3, and then
+                        // deleted soon after. This could happen if our poll_interval is long or
+                        // threads are being deleted quickly (e.g. in response to a raid).
+                        updates.push(BumpedOff(thread.no));
+                    }
+                }
+                // We didn't find a valid anchor (maybe all threads are new or were modified). So,
+                // we assume all removed threads were bumped off.
+                None => {
+                    updates.push(BumpedOff(thread.no));
+                }
             }
         }
 
