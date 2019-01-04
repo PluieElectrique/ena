@@ -40,19 +40,19 @@ pub enum FetchError {
 }
 
 macro_rules! impl_enum_from {
-    ($ext_type:ty, $enum:ident, $variant:ident) => {
-        impl From<$ext_type> for $enum {
+    ($variant:ident, $ext_type:ty) => {
+        impl From<$ext_type> for FetchError {
             fn from(err: $ext_type) -> Self {
-                $enum::$variant(err)
+                FetchError::$variant(err)
             }
         }
     };
 }
 
-impl_enum_from!(hyper::StatusCode, FetchError, BadStatus);
-impl_enum_from!(hyper::Error, FetchError, HyperError);
-impl_enum_from!(hyper::http::uri::InvalidUri, FetchError, InvalidUri);
-impl_enum_from!(std::io::Error, FetchError, IoError);
-impl_enum_from!(serde_json::Error, FetchError, JsonError);
-impl_enum_from!(actix::MailboxError, FetchError, MailboxError);
-impl_enum_from!(tokio::timer::Error, FetchError, TimerError);
+impl_enum_from!(BadStatus, hyper::StatusCode);
+impl_enum_from!(HyperError, hyper::Error);
+impl_enum_from!(InvalidUri, hyper::http::uri::InvalidUri);
+impl_enum_from!(IoError, std::io::Error);
+impl_enum_from!(JsonError, serde_json::Error);
+impl_enum_from!(MailboxError, actix::MailboxError);
+impl_enum_from!(TimerError, tokio::timer::Error);
