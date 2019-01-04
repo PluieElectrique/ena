@@ -378,14 +378,10 @@ fn fetch_media(
         return Either::A(future::err(FetchError::ExistingMedia));
     }
 
-    let uri: Uri = format!("{}/{}/{}", IMG_URI_PREFIX, board, filename)
-        .parse()
-        .unwrap_or_else(|err| {
-            panic!(
-                "Could not parse URI from ({}, {}): {}",
-                board, filename, err
-            );
-        });
+    let uri: Uri = match format!("{}/{}/{}", IMG_URI_PREFIX, board, filename).parse() {
+        Ok(uri) => uri,
+        Err(err) => return Either::A(future::err(err.into())),
+    };
 
     let future = client
         .get(uri.clone())
