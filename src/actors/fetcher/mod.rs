@@ -208,17 +208,21 @@ where
             StatusCode::NOT_FOUND => Err(FetchError::NotFound(uri.to_string())),
             StatusCode::NOT_MODIFIED => Err(FetchError::NotModified),
             StatusCode::OK => {
-                let new_modified = res
-                    .headers()
-                    .get(header::LAST_MODIFIED)
-                    .map(|new| {
-                        Utc.datetime_from_str(new.to_str().unwrap(), RFC_1123_FORMAT)
-                            .unwrap_or_else(|err| {
-                                error!("Could not parse Last-Modified header: {}", err);
-                                Utc::now()
-                            })
-                    })
-                    .unwrap_or_else(Utc::now);
+                let new_modified =
+                    res.headers()
+                        .get(header::LAST_MODIFIED)
+                        .map_or_else(Utc::now, |h| {
+                            h.to_str()
+                                .map(|h| Utc.datetime_from_str(h, RFC_1123_FORMAT))
+                                .unwrap_or_else(|err| {
+                                    error!("Could not parse Last-Modified header: {}", err);
+                                    Ok(Utc::now())
+                                })
+                                .unwrap_or_else(|err| {
+                                    error!("Could not parse Last-Modified header: {}", err);
+                                    Utc::now()
+                                })
+                        });
 
                 if last_modified > new_modified {
                     warn!(
