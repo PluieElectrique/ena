@@ -128,7 +128,7 @@ impl Handler<InsertPosts> for Database {
 
         let board = msg.0;
         let num_start = msg.2[0].no;
-        let num_end = msg.2[msg.2.len() - 1].no;
+        let num_end = msg.2.last().unwrap().no;
         let adjust_timestamps = self.adjust_timestamps;
         let params = msg.2.into_iter().map(move |post| {
             let no = post.no;
