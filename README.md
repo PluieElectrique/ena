@@ -16,7 +16,7 @@ Note: The 4chan API guidelines state that you should "make API requests using th
 
 ## Logging
 
-By default, only errors are logged. Logging is configured by setting the `RUST_LOG` environment variable. For example, to turn on all logging, use `RUST_LOG=ena`. Or, to just show warnings and errors, use `RUST_LOG=ena=warn`. See the `env_logger` [documentation](https://docs.rs/env_logger/*/env_logger/) for more information.
+Logging is configured by setting the `RUST_LOG` environment variable. For example, to turn on debug messages, use `RUST_LOG=ena=debug`. See the `env_logger` [documentation](https://docs.rs/env_logger/*/env_logger/) for more information.
 
 ## Differences from Asagi
 

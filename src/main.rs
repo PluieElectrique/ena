@@ -9,7 +9,7 @@ use ena::{actors::*, config::parse_config, log_error};
 const THREAD_UPDATER_MAILBOX_CAPACITY: usize = 500;
 
 fn main() {
-    env_logger::Builder::from_default_env()
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("ena=info"))
         .format(|fmt, record| {
             let timestamp = fmt.timestamp();
             let level = record.level();
