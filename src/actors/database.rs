@@ -52,6 +52,10 @@ impl Database {
 
                 pool.get_conn()
                     .and_then(|conn| conn.drop_query(init_sql))
+                    // If we don't disconnect these connections, and try to use them on the Actix
+                    // current_thread runtime after we shutdown this runtime, we will get a "reactor
+                    // gone" message.
+                    .and_then(|conn| conn.disconnect())
                     .map(move |_| debug!("/{}/: Created table and triggers", board))
             }))
         })?;
