@@ -39,6 +39,7 @@ impl Database {
             )?;
         }
 
+        info!("Creating database tables and triggers");
         runtime.block_on({
             let boards: Vec<Board> = config.boards.keys().cloned().collect();
             let pool = pool.clone();
@@ -51,7 +52,6 @@ impl Database {
 
                 pool.get_conn()
                     .and_then(|conn| conn.drop_query(init_sql))
-                    .and_then(|conn| conn.disconnect())
                     .map(move |_| debug!("/{}/: Created table and triggers", board))
             }))
         })?;
