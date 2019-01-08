@@ -84,7 +84,7 @@ impl Message for GetUnarchivedThreads {
 impl Handler<GetUnarchivedThreads> for Database {
     type Result = ResponseFuture<Vec<u64>, Error>;
 
-    fn handle(&mut self, msg: GetUnarchivedThreads, _ctx: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, msg: GetUnarchivedThreads, _: &mut Self::Context) -> Self::Result {
         Box::new(
             self.pool
                 .get_conn()
@@ -126,7 +126,7 @@ impl Message for InsertPosts {
 impl Handler<InsertPosts> for Database {
     type Result = ResponseFuture<Vec<String>, Error>;
 
-    fn handle(&mut self, msg: InsertPosts, _ctx: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, msg: InsertPosts, _: &mut Self::Context) -> Self::Result {
         assert!(!msg.2.is_empty(), "Cannot insert empty thread");
 
         let board = msg.0;
@@ -324,7 +324,7 @@ impl Message for UpdateOp {
 impl Handler<UpdateOp> for Database {
     type Result = ResponseFuture<(), Error>;
 
-    fn handle(&mut self, msg: UpdateOp, _ctx: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, msg: UpdateOp, _: &mut Self::Context) -> Self::Result {
         let mut params = params! {
             "num" => msg.1,
             "sticky" => msg.2.sticky,
@@ -367,7 +367,7 @@ impl Message for UpdatePost {
 impl Handler<UpdatePost> for Database {
     type Result = ResponseFuture<(), Error>;
 
-    fn handle(&mut self, msg: UpdatePost, _ctx: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, msg: UpdatePost, _: &mut Self::Context) -> Self::Result {
         let board = msg.0;
         let query = board_replace(
             board,
@@ -404,7 +404,7 @@ impl Message for MarkPostsRemoved {
 impl Handler<MarkPostsRemoved> for Database {
     type Result = ResponseFuture<(), Error>;
 
-    fn handle(&mut self, msg: MarkPostsRemoved, _ctx: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, msg: MarkPostsRemoved, _: &mut Self::Context) -> Self::Result {
         let query = board_replace(
             msg.0,
             "UPDATE `%%BOARD%%` \

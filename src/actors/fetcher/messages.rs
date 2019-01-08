@@ -11,7 +11,7 @@ impl Message for UpdateLastModified {
 impl Handler<UpdateLastModified> for Fetcher {
     type Result = Result<(), FetchError>;
 
-    fn handle(&mut self, msg: UpdateLastModified, _ctx: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, msg: UpdateLastModified, _: &mut Self::Context) -> Self::Result {
         if self
             .last_modified
             .get(&msg.0)
@@ -96,7 +96,7 @@ impl ToUri for FetchArchive {
 
 impl Handler<FetchArchive> for Fetcher {
     type Result = RateLimitedResponse<Vec<u64>, FetchError>;
-    fn handle(&mut self, msg: FetchArchive, _ctx: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, msg: FetchArchive, _: &mut Self::Context) -> Self::Result {
         RateLimitedResponse {
             sender: self.thread_list_sender.clone(),
             future: fetch_archive(&msg, &self.client),
@@ -109,7 +109,7 @@ pub struct FetchMedia(pub Board, pub Vec<String>);
 
 impl Handler<FetchMedia> for Fetcher {
     type Result = ();
-    fn handle(&mut self, msg: FetchMedia, _ctx: &mut Self::Context) {
+    fn handle(&mut self, msg: FetchMedia, _: &mut Self::Context) {
         // If a media future panics, the media runtime will crash and the sender will close. The
         // Actix system has its own runtime, so it won't crash. But, we can't recover from a media
         // runtime panic, so if the media runtime crashes we crash the Actix system as well.
