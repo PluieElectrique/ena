@@ -4,7 +4,7 @@ use actix::prelude::*;
 use chrono::prelude::*;
 use chrono_tz::America;
 use futures::{future, prelude::*};
-use mysql_async::{errors::Error, params, prelude::*, Opts, Pool, Value};
+use mysql_async::{error::Error, params, prelude::*, Opts, Pool, Value};
 use tokio::runtime::Runtime;
 
 use crate::{
@@ -27,8 +27,7 @@ pub struct Database {
 
 impl Database {
     pub fn try_new(config: &Config) -> Result<Self, Error> {
-        let pool_opts = Opts::from_url(&config.database_media.database_url)?;
-        let pool = Pool::new(pool_opts);
+        let pool = Pool::from_url(&config.database_media.database_url)?;
         let mut runtime = Runtime::new().unwrap();
 
         if config.asagi_compat.create_index_counters {
