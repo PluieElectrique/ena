@@ -4,7 +4,7 @@ use actix::prelude::*;
 use chrono::prelude::*;
 use chrono_tz::America;
 use futures::{future, prelude::*};
-use mysql_async::{error::Error, params, prelude::*, Opts, Pool, Value};
+use mysql_async::{error::Error, params, prelude::*, Pool, Value};
 use tokio::runtime::Runtime;
 
 use crate::{
