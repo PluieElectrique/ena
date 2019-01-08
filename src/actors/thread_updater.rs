@@ -1,4 +1,8 @@
-use std::{collections::HashMap, hash::Hasher, sync::Arc};
+use std::{
+    collections::HashMap,
+    hash::{Hash, Hasher},
+    sync::Arc,
+};
 
 use actix::prelude::*;
 use chrono::prelude::*;
@@ -345,7 +349,7 @@ impl From<&Post> for PostMetadata {
     fn from(post: &Post) -> Self {
         let comment_hash = post.comment.as_ref().map(|c| {
             let mut hasher = XxHash::default();
-            hasher.write(c.as_bytes());
+            c.hash(&mut hasher);
             hasher.finish()
         });
         let spoiler = post.image.as_ref().map(|i| i.spoiler);
