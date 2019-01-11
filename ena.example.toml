@@ -1,8 +1,11 @@
 # Global scraping settings
 [scraping]
 
-# Seconds to wait between fetching the threads.json of each board
-poll_interval = 60
+# Seconds to wait between fetching the threads.json of each board. A short interval may waste
+# requests, a long interval may miss data. 4stats.io has info on how fast boards move. A high
+# threads/hr needs a shorter interval to avoid missing threads, and vice-versa. You'll also need a
+# shorter interval if you want to increase your chances of catching deleted posts.
+poll_interval = 300
 
 # On startup, fetch (and potentially update) threads from archive.json
 fetch_archive = true
