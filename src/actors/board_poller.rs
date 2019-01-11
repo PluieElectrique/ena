@@ -138,8 +138,15 @@ impl BoardPoller {
         }
 
         // To determine if a removed thread was bumped off or deleted, we use the "anchor thread"
-        // heuristic. Note that when in doubt, we always assume that a removed thread was bumped
-        // off, as deletions are much rarer.
+        // heuristic.
+        //
+        // Notes/Flaws:
+        //   - When in doubt, we always assume that a removed thread was bumped off, as deletions
+        //     are much rarer.
+        //   - We will mark moved threads as deleted because they disappear from the board just like
+        //     a deleted thread would.
+        //   - If the last thread of a board is deleted, it will always be marked as bumped off. So,
+        //     an entire board always deleted from the end will be completely marked as bumped off.
         //
         // An anchor thread is a thread which:
         //   1. Appears in the previous thread list (i.e. is not a new thread), and
