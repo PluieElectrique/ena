@@ -33,17 +33,16 @@ VARIABLE unusedNos
 vars == <<threads, deletedNos, unusedNos>>
 
 Last(s) == s[Len(s)]
-Prepend(e, s) == <<e>> \o s
 ListRemove(n, s) == [i \in 1..Len(s) - 1 |-> IF i < n THEN s[i] ELSE s[i + 1]]
+Prepend(e, s) == <<e>> \o s
+Range(s) == { s[i] : i \in DOMAIN s }
 
 Init == /\ deletedNos = {}
         /\ LET initNos == CHOOSE n \in SUBSET Nos : Cardinality(n) = MaxThreads
                initThreads == { [no |-> n, bumps |-> 0] : n \in initNos }
            IN  /\ unusedNos = Nos \ initNos
-               \* Order initThreads by choosing a list...
-               /\ threads = CHOOSE t \in [1..MaxThreads -> initThreads] :
-                           \* ...whose range is initThreads
-                           { t[i] : i \in DOMAIN t} = initThreads
+               \* Order initThreads by arbitrarily choosing a list whose range is initThreads
+               /\ threads = CHOOSE t \in [1..MaxThreads -> initThreads] : Range(t) = initThreads
 
 New == /\ Cardinality(unusedNos) > 0
        /\ LET no == CHOOSE no \in unusedNos : TRUE
