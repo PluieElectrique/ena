@@ -10,8 +10,6 @@ So, what is this spec actually useful for? Honestly, not much. If you want to un
 
 Really, I only wrote this spec for practice. The best use I can find for it is exploring scenarios in which the heuristic fails to detect all deletions. Looking at the error traces might help you better understand the limits of the heuristic.
 
-**Note**: This spec does not match the Rust code exactly. In reality, there are limits to a 4chan board (e.g. how fast threads are added or deleted) which are not respected by the TLC checker. That's by design, because the point of a TLA+ spec is to find those extremely unlikely concurrency bugs. But, for our purposes, all we care about is that the heuristic is good enough. A heuristic which marks all threads as bumped off is 100% correct, but completely useless. So, the Rust code makes a trade-off: allow a small possibility of incorrectly marking a bumped-off thread as deleted in exchange for being able to mark more deleted threads as deleted. 
-
 ## Getting started
 
 In the rare event that you want to run this spec (maybe you prefer reading formal logic over code, or want to tinker with the heuristic or 4chan thread mechanics), here are some brief instructions:

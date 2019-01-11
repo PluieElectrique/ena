@@ -4,9 +4,9 @@ A 4chan scraper. Currently designed to be a (mostly) compatible, improved replac
 
 ## Getting started
 
-Install and configure a MySQL-compatible database (tested on MariaDB 10.1). If you are running Ena with FoolFuuka, consider referring to the [instructions](https://wiki.bibanon.org/FoolFuuka) at the Bibliotheca Anonoma wiki.
+Install and configure a MySQL-compatible database (tested on MariaDB 10.1). If you want to setup FoolFuuka (to run alongside Ena), consider referring to the [FoolFuuka guide](https://wiki.bibanon.org/FoolFuuka) on the Bibliotheca Anonoma wiki.
 
-Copy the default configuration file `ena.example.toml` to `ena.toml` and adjust the settings as necessary. Then, [install Rust](https://www.rust-lang.org/tools/install). Ena requires a minimum Rust version of `1.31.0` (Rust 2018). Finally, compile and run Ena with:
+Copy the default configuration file `ena.example.toml` to `ena.toml`. Add the boards you want to archive and adjust the other settings as necessary. Then, [install Rust](https://www.rust-lang.org/tools/install). Ena requires a minimum Rust version of `1.31.0` (Rust 2018). Finally, compile and run Ena with:
 
 ```sh
 cargo run --release
@@ -16,7 +16,7 @@ Note: The 4chan API guidelines state that you should "make API requests using th
 
 ## Logging
 
-Logging is configured by setting the `RUST_LOG` environment variable. For example, to turn on debug messages, use `RUST_LOG=ena=debug`. See the `env_logger` [documentation](https://docs.rs/env_logger/*/env_logger/) for more information.
+The default log level is `INFO`. Logging is configured by setting the `RUST_LOG` environment variable. For example, to turn on debug messages, use `RUST_LOG=ena=debug`. See the `env_logger` [documentation](https://docs.rs/env_logger/*/env_logger/) for more information.
 
 ## Differences from Asagi
 
@@ -32,7 +32,6 @@ Logging is configured by setting the `RUST_LOG` environment variable. For exampl
 * The `exif` column (a JSON blob of exif data, unique IPs, `since4pass`, and troll countries) is not used
 * The old media/thumbs directory structure is not supported
 * The "anchor thread" heuristic is used instead of the "page threshold" heuristic for determining when a thread was bumped off and when it was deleted
-* In ambiguous cases, removed threads are assumed to be bumped off and not deleted
 * When possible, the `timestamp_expired` for a deleted thread or post is taken from the `Last-Modified` header of the request, and not the time at which it was processed
 * Bypassing the Cloudflare "I'm Under Attack Mode" JS challenge is not supported
 
@@ -60,15 +59,18 @@ Ena strives to be an accurate scraper, but it isn't perfect.
 
 ### Scraping mechanics
 
-* Though the bumped off/deleted detection should be better than Asagi, it still has flaws: (If absolute accuracy is required a `HEAD` request could be sent for each thread)
-    * If `poll_interval` is too long or the scraped board moves too quickly, threads may not be marked correctly
-    * If the last _n_ threads from the catalog are deleted, they will be marked as bumped off
+Though the bumped off/deleted detection should be better than Asagi in most cases, it still has flaws: (If absolute accuracy is required a `HEAD` request would have to be sent for each thread. For archived boards, `archive.json` could be polled instead.)
+  * If `poll_interval` is too long or the scraped board moves too quickly, deleted threads may not be marked as bumped off
+  * If the last _n_ threads from the catalog are deleted, modified, or bumped off, then those deleted threads will be marked as bumped off. In this way, it's technically possible for an entire board to be deleted and for every thread to be marked as bumped off (this could happen as a response to a raid)
+  * If no anchor is found (every thread is new or modified), all threads are assumed to be bumped off
+  * Moved threads will be marked as deleted. This is because they disappear from a board just like a deleted thread would
 
 ### Data loss
 
-* Threads and posts deleted on 4chan while Ena is stopped will not be marked as such when it restarts
+* Threads and posts deleted on 4chan while Ena is stopped will not be marked as deleted when Ena restarts
 * If Ena crashes in the process of updating an archived thread, on restart the thread may be marked as "archived" even if the update never happened. Thus, changes between the last poll of the thread and the archival of it may be lost
-* Media are only downloaded the first time they or the post they are in is seen. This guards against duplicate media. But, if Ena crashes while media are queued to download, on restart they will not be automatically requeued. Thus, those media will be lost unless they are requeued from a thread
+* Media are only downloaded the first time they or the post they are in is seen. This guards against duplicate media. But, if Ena crashes while media are queued to download, on restart they will not be requeued. Thus, those media never be downloaded
+* Ena is not smart enough to notice large amounts of errors (e.g. if there's a network failure). So, it will just retry requests until all attempts are used up and the request queues empty out. Again, a long enough outage could lose media
 
 ## Legal
 
