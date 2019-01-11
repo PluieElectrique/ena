@@ -2,6 +2,14 @@
 
 A 4chan scraper. Currently designed to be a (mostly) compatible, improved replacement for Asagi.
 
+## Features
+
+* Low memory usage (maybe around 100–200 MB to scrape all of 4chan)
+* Asagi compatibility
+* Rate limiting
+* Per-board scraping configuration
+* Request retrying
+
 ## Getting started
 
 Install and configure a MySQL-compatible database (tested on MariaDB 10.1). If you want to setup FoolFuuka (to run alongside Ena), consider referring to the [FoolFuuka guide](https://wiki.bibanon.org/FoolFuuka) on the Bibliotheca Anonoma wiki.
