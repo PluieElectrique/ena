@@ -31,16 +31,21 @@ Init == /\ Board!Init
         /\ seenNos = {}
 
 Last(s) == s[Len(s)]
+Range(s) == { s[i] : i \in DOMAIN s }
 ThreadNos(s) == { s[i].no : i \in 1..Len(s) }
 
 \* Poll the current threads and use the anchor to find deleted threads
 Poll == /\ prevThreads /= currThreads
         /\ (Len(currThreads) > 0 /\ Len(prevThreads) > 0)
-        /\ \E anchorIndex \in 1..Len(prevThreads) :
-             /\ prevThreads[anchorIndex] = Last(currThreads)
+        (* If there is at least one unchanged thread, we know the last thread is a valid anchor.
+           (See the comments in board_poller.rs for a proof.) This lets us find an anchor even when
+           the last thread is saged. We don't implement saging in this spec, but it's good to check
+           that the method works anyways. *)
+        /\ (Range(currThreads) \intersect Range(prevThreads)) /= {}
+        /\ \E anchor \in 1..Len(prevThreads) :
+             /\ prevThreads[anchor].no = Last(currThreads).no
              /\ LET removedNos == ThreadNos(prevThreads) \ ThreadNos(currThreads)
-                    deletedNos == removedNos \intersect
-                                    { prevThreads[i].no : i \in 1..anchorIndex - 1 }
+                    deletedNos == removedNos \intersect { prevThreads[i].no : i \in 1..anchor - 1 }
                 IN  anchorDeletedNos' = anchorDeletedNos \union deletedNos
         /\ prevThreads' = currThreads
         /\ seenNos' = seenNos \union ThreadNos(currThreads)
