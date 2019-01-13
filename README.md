@@ -70,7 +70,7 @@ Ena strives to be an accurate scraper, but it isn't perfect.
 Though the bumped off/deleted detection should be better than Asagi in most cases, it still has flaws: (If absolute accuracy is required a `HEAD` request would have to be sent for each thread. For archived boards, `archive.json` could be polled instead.)
   * If `poll_interval` is too long or the scraped board moves too quickly, deleted threads may not be marked as bumped off
   * If the last _n_ threads from the catalog are deleted, modified, or bumped off, then those deleted threads will be marked as bumped off. In this way, it's technically possible for an entire board to be deleted and for every thread to be marked as bumped off (this could happen as a response to a raid)
-  * If no anchor is found (every thread is new or modified), all threads are assumed to be bumped off
+  * If no anchor is found (every thread is new or modified), all removed threads are assumed to have been bumped off
   * Moved threads will be marked as deleted. This is because they disappear from a board just like a deleted thread would
 
 ### Data loss
