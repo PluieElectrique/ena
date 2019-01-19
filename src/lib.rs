@@ -19,7 +19,7 @@ macro_rules! format_if_nonzero {
 
 /// A helper macro for creating a comma-separated `String` list of `format_if_nonzero!` items.
 macro_rules! nonzero_list_format {
-    ($($str:expr, $expr:expr),+ $(,)*) => {
+    ($($str:expr, $expr:expr),+ $(,)?) => {
         [$(format_if_nonzero!($str, $expr)),+]
         .iter()
         .fold(String::new(), |mut acc, s| {
