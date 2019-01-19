@@ -26,8 +26,8 @@ mod messages;
 mod rate_limiter;
 mod retry;
 
-pub use self::{error::FetchError, messages::*};
-use self::{helper::*, rate_limiter::StreamExt, retry::Retry};
+pub use {error::FetchError, messages::*};
+use {helper::*, rate_limiter::StreamExt, retry::Retry};
 
 type HttpsClient = Client<HttpsConnector<HttpConnector>>;
 
@@ -284,7 +284,7 @@ fn fetch_thread_retry(
     retry_sender: Sender<Retry<(FetchThread, DateTime<Utc>)>>,
 ) -> impl Future<Item = (), Error = ()> {
     fetch_thread(retry.to_data(), client, fetcher).then(move |result| {
-        use self::FetchError::*;
+        use FetchError::*;
         if let Err(ref err) = result {
             let will_retry = retry.can_retry()
                 && match err {
@@ -428,7 +428,7 @@ fn fetch_media_retry(
     retry_sender: Sender<Retry<(Board, String)>>,
 ) -> impl Future<Item = (), Error = ()> {
     fetch_media(retry.to_data(), client, media_path).or_else(move |err| {
-        use self::FetchError::*;
+        use FetchError::*;
         let will_retry = retry.can_retry()
             && match err {
                 ExistingMedia | NotFound(_) => false,

@@ -5,6 +5,6 @@ mod database;
 mod fetcher;
 mod thread_updater;
 
-pub use self::{
+pub use {
     board_poller::BoardPoller, database::Database, fetcher::Fetcher, thread_updater::ThreadUpdater,
 };

@@ -78,7 +78,7 @@ impl BoardPoller {
         mut curr_threads: Vec<Thread>,
         last_modified: DateTime<Utc>,
     ) {
-        use self::ThreadUpdate::*;
+        use ThreadUpdate::*;
         let mut updates = vec![];
         let mut removed = vec![];
         let anchor_no = curr_threads.last().map(|anchor| anchor.no);

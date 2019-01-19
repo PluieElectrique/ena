@@ -251,7 +251,7 @@ impl Handler<BoardUpdate> for ThreadUpdater {
         let BoardUpdate(board, updates, last_modified) = msg;
 
         for thread in updates {
-            use self::ThreadUpdate::*;
+            use ThreadUpdate::*;
             match thread {
                 New(no) | Modified(no) => threads_to_fetch.push(no),
                 BumpedOff(no) => {
