@@ -1,5 +1,7 @@
 # Ena
 
+![minimum Rust version: 1.32](https://img.shields.io/badge/minimum%20Rust%20version-1.32-brightgreen.svg)
+
 A 4chan scraper. Currently designed to be a (mostly) compatible, improved replacement for Asagi.
 
 ## Features
@@ -14,7 +16,7 @@ A 4chan scraper. Currently designed to be a (mostly) compatible, improved replac
 
 Install and configure a MySQL-compatible database (tested on MariaDB 10.1). If you want to setup FoolFuuka (to run alongside Ena), consider referring to the [FoolFuuka guide](https://wiki.bibanon.org/FoolFuuka) on the Bibliotheca Anonoma wiki.
 
-Copy the default configuration file `ena.example.toml` to `ena.toml`. Add the boards you want to archive and adjust the other settings as necessary. Then, [install Rust](https://www.rust-lang.org/tools/install). Ena requires a minimum Rust version of `1.31.0` (Rust 2018). Finally, compile and run Ena with:
+Copy the default configuration file `ena.example.toml` to `ena.toml`. Add the boards you want to archive and adjust the other settings as necessary. Then, [install Rust](https://www.rust-lang.org/tools/install). Ena targets the latest stable version. Finally, compile and run Ena with:
 
 ```sh
 cargo run --release
