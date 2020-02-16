@@ -19,6 +19,7 @@ CONSTANTS Nos
 ASSUME /\ { BumpLimit, MaxThreads } \subseteq Nat
        /\ BumpLimit >= 0
        /\ MaxThreads > 0
+       /\ IsFiniteSet(Nos)
        /\ Cardinality(Nos) >= MaxThreads
 
 \* List of current threads
