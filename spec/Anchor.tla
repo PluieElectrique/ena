@@ -9,7 +9,7 @@ EXTENDS Naturals, Sequences
 
 \* Constants and variables for Board. See Board.tla for an explanation.
 CONSTANTS BumpLimit, MaxThreads, Nos
-VARIABLES boardDeletedNos, unusedNos
+VARIABLES boardDeletedNos, time, unusedNos
 
 \* The set of deleted thread numbers detected by the anchor heuristic
 VARIABLE anchorDeletedNos
@@ -20,7 +20,7 @@ VARIABLES prevThreads, currThreads
 \* The set of thread numbers we've seen
 VARIABLE seenNos
 
-vars == <<anchorDeletedNos, boardDeletedNos, currThreads, prevThreads, seenNos, unusedNos>>
+vars == <<anchorDeletedNos, boardDeletedNos, currThreads, prevThreads, seenNos, time, unusedNos>>
 
 Board == INSTANCE Board WITH deletedNos <- boardDeletedNos,
                              threads <- currThreads
@@ -39,8 +39,7 @@ Poll == /\ prevThreads /= currThreads
         /\ (Len(currThreads) > 0 /\ Len(prevThreads) > 0)
         (* If there is at least one unchanged thread, we know the last thread is a valid anchor.
            (See the comments in board_poller.rs for a proof.) This lets us find an anchor even when
-           the last thread is saged. We don't implement saging in this spec, but it's good to check
-           that the method works anyways. *)
+           the last thread is saged (i.e. lastModified is updated by Modify). *)
         /\ (Range(currThreads) \intersect Range(prevThreads)) /= {}
         /\ \E anchor \in 1..Len(prevThreads) :
              /\ prevThreads[anchor].no = Last(currThreads).no
@@ -49,13 +48,13 @@ Poll == /\ prevThreads /= currThreads
                 IN  anchorDeletedNos' = anchorDeletedNos \union deletedNos
         /\ prevThreads' = currThreads
         /\ seenNos' = seenNos \union ThreadNos(currThreads)
-        /\ UNCHANGED <<boardDeletedNos, currThreads, unusedNos>>
+        /\ UNCHANGED <<boardDeletedNos, currThreads, time, unusedNos>>
 
 \* We couldn't find an anchor, so just copy currThreads to prevThreads
 Copy == /\ prevThreads /= currThreads
         /\ prevThreads' = currThreads
         /\ seenNos' = seenNos \union ThreadNos(currThreads)
-        /\ UNCHANGED <<anchorDeletedNos, boardDeletedNos, currThreads, unusedNos>>
+        /\ UNCHANGED <<anchorDeletedNos, boardDeletedNos, currThreads, time, unusedNos>>
 
 Next == \/ (Poll \/ Copy)
         \/ (Board!Next /\ UNCHANGED <<anchorDeletedNos, prevThreads, seenNos>>)
