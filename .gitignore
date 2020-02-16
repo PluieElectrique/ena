@@ -7,5 +7,6 @@
 /media
 
 # TLA Toolbox and generated spec PDFs
-/spec/*.toolbox
 /spec/*.pdf
+/spec/*.tlaps
+/spec/*.toolbox
