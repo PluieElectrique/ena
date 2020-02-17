@@ -79,38 +79,38 @@ THEOREM Spec => []NoFalseDeletions
 <1>1 Init => Inv
     BY DEF Init, Inv, NoFalseDeletions
 <1>2 Inv /\ [Next]_vars => Inv'
-     <2> SUFFICES ASSUME Inv, [Next]_vars PROVE Inv'
-         OBVIOUS
-     <2> USE DEF Inv, NoFalseDeletions
-     <2>1 CASE Poll
-     (* This is the main crux of the whole proof, but I'm not sure how to do it. Inv needs to be
-        expanded, of course, but with what? The current structure might also be awkward for proofs.
-        Using a set of threads where position is determined by a bumpTime field and pruned/deleted
-        status is determined by another field might be better. *)
-     <2>2 CASE Copy
-          BY <2>2 DEF Copy
-     <2>3 CASE Board!Next /\ UNCHANGED anchorDeletedNos
-          <3>1 CASE Board!New \/ Board!Bump \/ Board!Modify
-               <4>1 UNCHANGED boardDeletedNos
-                    BY <3>1 DEF Board!New, Board!Bump, Board!Modify
-               <4>2 QED
-                    BY <2>3, <4>1
-          <3>2 CASE Board!Delete
-               <4>1 boardDeletedNos \subseteq boardDeletedNos'
-                    BY <3>2 DEF Board!Delete
-               <4>2 QED
-                    BY <2>3, <4>1
-          <3>3 CASE UNCHANGED Board!vars
-               BY <2>3, <3>3 DEF Board!vars
-          <3>4 QED
-               BY <2>3, <3>1, <3>2, <3>3 DEF Board!Next
-     <2>4 CASE UNCHANGED vars
-          BY <2>4 DEF vars
-     <2>5 QED
-          BY <2>1, <2>2, <2>3, <2>4 DEF Next
+    <2> SUFFICES ASSUME Inv, [Next]_vars PROVE Inv'
+        OBVIOUS
+    <2> USE DEF Inv, NoFalseDeletions
+    <2>1 CASE Poll
+    (* This is the main crux of the whole proof, but I'm not sure how to do it. Inv needs to be
+       expanded, of course, but with what? The current structure might also be awkward for proofs.
+       Using a set of threads where position is determined by a bumpTime field and pruned/deleted
+       status is determined by another field might be better. *)
+    <2>2 CASE Copy
+        BY <2>2 DEF Copy
+    <2>3 CASE Board!Next /\ UNCHANGED anchorDeletedNos
+        <3>1 CASE Board!New \/ Board!Bump \/ Board!Modify
+            <4>1 UNCHANGED boardDeletedNos
+                BY <3>1 DEF Board!New, Board!Bump, Board!Modify
+            <4>2 QED
+                BY <2>3, <4>1
+        <3>2 CASE Board!Delete
+            <4>1 boardDeletedNos \subseteq boardDeletedNos'
+                BY <3>2 DEF Board!Delete
+            <4>2 QED
+                BY <2>3, <4>1
+        <3>3 CASE UNCHANGED Board!vars
+            BY <2>3, <3>3 DEF Board!vars
+        <3>4 QED
+            BY <2>3, <3>1, <3>2, <3>3 DEF Board!Next
+    <2>4 CASE UNCHANGED vars
+        BY <2>4 DEF vars
+    <2>5 QED
+        BY <2>1, <2>2, <2>3, <2>4 DEF Next
 <1>3 Inv => NoFalseDeletions
-     BY DEF Inv
+    BY DEF Inv
 <1>4 QED
-     BY <1>1, <1>2, <1>3, PTL DEF Spec
+    BY <1>1, <1>2, <1>3, PTL DEF Spec
 
 ====
