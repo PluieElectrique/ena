@@ -45,7 +45,7 @@ Poll == /\ prevThreads /= currThreads
              /\ prevThreads[anchor].no = Last(currThreads).no
              /\ LET removedNos == ThreadNos(prevThreads) \ ThreadNos(currThreads)
                     deletedNos == removedNos \intersect { prevThreads[i].no : i \in 1..anchor - 1 }
-                IN  anchorDeletedNos' = anchorDeletedNos \union deletedNos
+                 IN anchorDeletedNos' = anchorDeletedNos \union deletedNos
         /\ prevThreads' = currThreads
         /\ seenNos' = seenNos \union ThreadNos(currThreads)
         /\ UNCHANGED <<boardDeletedNos, currThreads, time, unusedNos>>

@@ -36,14 +36,14 @@ Init == /\ deletedNos = {}
         /\ time = 0
         /\ LET initNos == CHOOSE n \in SUBSET Nos : Cardinality(n) = MaxThreads
                initThreads == { [no |-> n, bumps |-> 0, lastModified |-> time] : n \in initNos }
-           IN  /\ unusedNos = Nos \ initNos
+            IN /\ unusedNos = Nos \ initNos
                \* Order initThreads by arbitrarily choosing a list whose range is initThreads
                /\ threads = CHOOSE t \in [1..MaxThreads -> initThreads] : Range(t) = initThreads
 
 New == /\ Cardinality(unusedNos) > 0
        /\ LET no == CHOOSE no \in unusedNos : TRUE
               nextThreads == Prepend([no |-> no, bumps |-> 0, lastModified |-> time], threads)
-          IN  /\ unusedNos' = unusedNos \ { no }
+           IN /\ unusedNos' = unusedNos \ { no }
               /\ IF Len(nextThreads) > MaxThreads THEN
                    threads' = ListRemove(Len(nextThreads), nextThreads)
                  ELSE
